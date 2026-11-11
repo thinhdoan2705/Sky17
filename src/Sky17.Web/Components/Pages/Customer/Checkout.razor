@@ -1,3 +1,4 @@
+@page "/checkout/{StoreId:int}"
 @page "/checkout"
 @attribute [Authorize(Roles = Roles.Customer)]
 @inherits PortalPage
@@ -8,12 +9,12 @@
 @inject CartState CartBadge
 @inject IAdministrativeUnits Units
 
-<PageHeader Title="Thanh toán" Subtitle="Kiểm tra thông tin và xác nhận đơn hàng" />
+<PageHeader Title="Thanh toán" Subtitle="@(cart?.StoreName is { } n ? $"Đơn hàng từ {n}" : "Kiểm tra thông tin và xác nhận đơn hàng")" />
 
 @if (Loading) { <Skeleton Lines="6" /> }
 else if (cart is null || cart.IsEmpty)
 {
-    <div class="card"><EmptyState Icon="🛒" Title="Giỏ hàng đang trống"><a class="btn" href="/">Chọn món</a></EmptyState></div>
+    <div class="card"><EmptyState Icon="🛒" Title="Giỏ hàng của cửa hàng này đang trống"><a class="btn" href="/cart">Về giỏ hàng</a></EmptyState></div>
 }
 else
 {
@@ -118,6 +119,8 @@ else
 }
 
 @code {
+    /// <summary>The store cart being checked out (one order per store).</summary>
+    [Parameter] public int? StoreId { get; set; }
     private CartDto? cart;
     private IReadOnlyList<AddressDto> addresses = [];
     private int selectedAddress;
@@ -131,7 +134,7 @@ else
     {
         quoting = true;
         StateHasChanged();
-        try { quote = await CartService.QuoteAsync(input.Latitude, input.Longitude); }
+        try { quote = StoreId is { } sid ? await CartService.QuoteAsync(sid, input.Latitude, input.Longitude) : null; }
         catch (Exception ex) when (IsUserError(ex)) { quote = null; }
         finally { quoting = false; }
     }
@@ -145,7 +148,15 @@ else
 
     protected override async Task LoadAsync()
     {
-        cart = await CartService.GetAsync();
+        if (StoreId is null)
+        {
+            // Legacy /checkout link: go straight to the only cart, otherwise let the customer pick one.
+            var all = await CartService.GetAllAsync();
+            Nav.NavigateTo(all.Count == 1 ? $"/checkout/{all[0].StoreId}" : "/cart", replace: true);
+            return;
+        }
+        input.StoreId = StoreId.Value;
+        cart = await CartService.GetAsync(StoreId.Value);
         addresses = await Addresses.GetMineAsync();
         if (initialized) return;
         initialized = true;
@@ -194,7 +205,7 @@ else
     private Task PlaceAsync() => RunAsync(async () =>
     {
         var result = await Orders.PlaceOrderAsync(input);
-        CartBadge.Set(0);
+        CartBadge.Set(await CartService.CountAsync());
         Nav.NavigateTo($"/orders/{result.Code}?placed=1");
     }, reload: false);
 }

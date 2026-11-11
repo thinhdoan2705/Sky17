@@ -22,16 +22,16 @@ public class MapPricingTests
     {
         await using var app = await TestApp.CreateAsync();
         app.Services.GetRequiredService<FakeRoutingService>().DistanceMeters = 5_000; // 2km base + 3 extra km
-        var (_, _, pa, _) = await app.CreateStoreAsync(priceA: 29_000);
+        var (_, storeId, pa, _) = await app.CreateStoreAsync(priceA: 29_000);
         var customer = await app.CreateUserAsync("C", Roles.Customer);
         using var c = app.As(customer);
         await c.Get<ICartService>().AddAsync(pa, 1);
 
-        var quote = await c.Get<ICartService>().QuoteAsync(10.9757, 106.6688);
+        var quote = await c.Get<ICartService>().QuoteAsync(storeId, 10.9757, 106.6688);
         Assert.Equal(5_000, quote.DistanceMeters);
         Assert.Equal(30_000, quote.DeliveryFee);
 
-        var placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(PinnedCheckout());
+        var placed = await c.PlaceOrderAsync(PinnedCheckout());
         await using var db = app.Db();
         var order = await db.Orders.SingleAsync(o => o.Id == placed.OrderId);
         Assert.Equal(30_000, order.DeliveryFee);
@@ -51,7 +51,7 @@ public class MapPricingTests
         var customer = await app.CreateUserAsync("C", Roles.Customer);
         using var c = app.As(customer);
         await c.Get<ICartService>().AddAsync(pa, 1);
-        var placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(PinnedCheckout());
+        var placed = await c.PlaceOrderAsync(PinnedCheckout());
 
         await using var db = app.Db();
         var order = await db.Orders.SingleAsync(o => o.Id == placed.OrderId);
@@ -70,7 +70,7 @@ public class MapPricingTests
         var customer = await app.CreateUserAsync("C", Roles.Customer);
         using var c = app.As(customer);
         await c.Get<ICartService>().AddAsync(pa, 1);
-        await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+        await c.PlaceOrderAsync(TestApp.Checkout());
         Assert.Equal(0, routing.Calls);
     }
 
@@ -84,7 +84,7 @@ public class MapPricingTests
         await c.Get<ICartService>().AddAsync(pa, 1);
         var input = PinnedCheckout();
         input.Latitude = 123; // out of range
-        await Assert.ThrowsAsync<DomainException>(() => c.Get<ICustomerOrderService>().PlaceOrderAsync(input));
+        await Assert.ThrowsAsync<DomainException>(() => c.PlaceOrderAsync(input));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class MapPricingTests
         using (var c = app.As(customer))
         {
             await c.Get<ICartService>().AddAsync(pa, 1);
-            placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(PinnedCheckout());
+            placed = await c.PlaceOrderAsync(PinnedCheckout());
         }
         var driver = await app.CreateDriverAsync("D");
         using (var s = app.As((await app.Db().StoreMembers.FirstAsync(m => m.StoreId == storeId)).UserId, Roles.Seller))

@@ -17,7 +17,7 @@ public readonly record struct GeoPoint(double Latitude, double Longitude)
 {
     public bool IsValid => Latitude is >= -90 and <= 90 && Longitude is >= -180 and <= 180 && !(Latitude == 0 && Longitude == 0);
 
-    /// <summary>Great-circle (straight-line) distance in meters. For ranking nearby drivers only — never for pricing.</summary>
+    /// <summary>Great-circle (straight-line) distance in meters. For ranking (nearby drivers, store distance in search) — never for pricing.</summary>
     public int StraightLineMetersTo(GeoPoint other)
     {
         const double r = 6_371_000;

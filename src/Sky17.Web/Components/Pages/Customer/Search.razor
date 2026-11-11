@@ -1,53 +1,133 @@
 @page "/search"
 @inherits PortalPage
 @inject ICatalogService Catalog
+@inject IAddressService Addresses
+@inject CustomerLocation Location
+@inject IJSRuntime JS
 
-<PageHeader Title="Tìm kiếm" Subtitle="@(string.IsNullOrWhiteSpace(Q) ? "Nhập từ khóa để tìm món ăn và cửa hàng" : $"Kết quả cho “{Q}”")" />
+<PageHeader Title="Tìm món ăn" Subtitle="@(string.IsNullOrWhiteSpace(Q) ? "Các cửa hàng gần bạn và thực đơn" : $"Kết quả cho “{Q}”")" />
 
-<form class="flex mb-2" @onsubmit="Go">
+<form class="flex mb-1" @onsubmit="Go">
     <input class="search grow" placeholder="⌕ Tên món, cửa hàng..." @bind="term" aria-label="Từ khóa" />
     <button class="btn" type="submit">Tìm</button>
 </form>
 
-@if (Loading) { <Skeleton Lines="5" /> }
+<div class="search-location">
+    <span class="muted small">📍 Khoảng cách tính từ:</span>
+    @if (savedPoints.Count > 0)
+    {
+        <select aria-label="Chọn điểm giao" value="@(Location.AddressId?.ToString() ?? "")" @onchange="PickAddress">
+            @if (Location.AddressId is null) { <option value="">— Chọn địa chỉ —</option> }
+            @foreach (var a in savedPoints) { <option value="@a.Id">@a.Label · @a.Street</option> }
+            @if (Location.AddressId == 0) { <option value="0">Vị trí hiện tại</option> }
+        </select>
+    }
+    else if (Location.HasPoint)
+    {
+        <b class="small">@Location.Label</b>
+    }
+    <button type="button" class="btn btn-soft btn-sm" disabled="@locating" @onclick="UseDeviceLocation">
+        @(locating ? "Đang lấy vị trí…" : "🎯 Vị trí hiện tại")
+    </button>
+</div>
+@if (!Location.HasPoint)
+{
+    <div class="alert alert-info small mt-1">Chọn địa chỉ giao hoặc bật vị trí để xem khoảng cách và sắp xếp cửa hàng gần bạn nhất.</div>
+}
+@if (locationError is not null) { <div class="alert alert-warning small mt-1">@locationError</div> }
+
+@if (Loading) { <Skeleton Lines="6" /> }
+else if (groups.Count == 0)
+{
+    <div class="card mt-2"><EmptyState Icon="🔍" Title="Không tìm thấy món phù hợp" Text="Thử từ khóa khác như “cà phê”, “phở”, “bánh mì”." /></div>
+}
 else
 {
-    @if (stores.Count > 0)
+    <p class="muted small mt-2">@groups.Count cửa hàng · @groups.Sum(g => g.MatchedCount) món@(Location.HasPoint ? " · sắp xếp gần nhất trước" : "")</p>
+    @foreach (var g in groups)
     {
-        <section class="customer-section">
-            <div class="section-title"><h2>Cửa hàng</h2><span class="muted small">@stores.Count kết quả</span></div>
-            <div class="store-grid">@foreach (var s in stores) { <StoreCard Store="s" /> }</div>
+        <section class="card store-result">
+            <div class="store-result-head">
+                <a class="store-result-name" href="/stores/@g.Store.Id">
+                    <span class="store-emoji">@g.Store.Emoji</span>
+                    <span>
+                        <b>@g.Store.Name</b>
+                        <span class="km-badge @(g.DistanceKm is null ? "unknown" : "")" title="Khoảng cách đường chim bay">
+                            @(g.DistanceKm is { } km ? $"{km:0.0} km" : "? km")
+                        </span>
+                        <span class="small muted d-block">@g.Store.Tagline @(g.Store.IsOpenNow ? "" : "· Đang đóng cửa")</span>
+                    </span>
+                </a>
+                <a class="link small" href="/stores/@g.Store.Id">Xem quán →</a>
+            </div>
+            @if (g.StoreNameMatched) { <p class="small muted mb-0">Tên cửa hàng khớp từ khóa — thực đơn của quán:</p> }
+            <div class="product-list">@foreach (var p in g.Products) { <ProductCard Product="p" OnAdd="Add" HideStore="true" /> }</div>
+            @if (g.MatchedCount > g.Products.Count)
+            {
+                <a class="link small" href="/stores/@g.Store.Id">+ @(g.MatchedCount - g.Products.Count) món khác tại quán</a>
+            }
         </section>
     }
-    <section class="customer-section">
-        <div class="section-title"><h2>Món ăn</h2><span class="muted small">@products.Count kết quả</span></div>
-        @if (products.Count == 0)
-        {
-            <EmptyState Icon="🔍" Title="Không tìm thấy món phù hợp" Text="Thử từ khóa khác như “cà phê”, “phở”, “bánh mì”." />
-        }
-        else
-        {
-            <div class="product-list">@foreach (var p in products) { <ProductCard Product="p" OnAdd="Add" /> }</div>
-        }
-    </section>
+    <p class="small muted">Khoảng cách là đường chim bay từ điểm đã chọn; phí giao được tính theo quãng đường thực tế khi đặt hàng.</p>
 }
 <CartAdder @ref="adder" />
 
 @code {
     [SupplyParameterFromQuery] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "cat")] public int? CategoryId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private string term = "";
     private CartAdder? adder;
-    private IReadOnlyList<StoreCardDto> stores = [];
-    private IReadOnlyList<ProductCardDto> products = [];
+    private IReadOnlyList<StoreSearchGroupDto> groups = [];
+    private IReadOnlyList<AddressDto> savedPoints = [];
+    private bool locating;
+    private string? locationError;
 
     protected override async Task LoadAsync()
     {
         term = Q ?? "";
-        stores = string.IsNullOrWhiteSpace(Q) ? [] : await Catalog.GetStoresAsync(Q, 12);
-        products = await Catalog.SearchProductsAsync(new ProductQuery(Search: Q, Take: 60));
+        var user = AuthState is null ? null : (await AuthState).User;
+        if (user?.IsInRole(Roles.Customer) == true)
+        {
+            savedPoints = (await Addresses.GetMineAsync()).Where(a => a.Latitude is not null && a.Longitude is not null).ToList();
+            // First visit in this session: measure from the default saved address.
+            if (Location.AddressId is null && (savedPoints.FirstOrDefault(a => a.IsDefault) ?? savedPoints.FirstOrDefault()) is { } d)
+                Location.Set(d.Id, d.Label, d.Latitude, d.Longitude);
+        }
+        groups = await Catalog.SearchByStoreAsync(new StoreSearchQuery(Q, CategoryId, Location.Latitude, Location.Longitude));
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
     private void Go() => Nav.NavigateTo("/search?q=" + Uri.EscapeDataString(term.Trim()));
     private Task Add(ProductCardDto p) => adder!.AddAsync(p.Id);
+
+    private async Task PickAddress(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var id)) return;
+        if (id == 0) { await UseDeviceLocation(); return; }
+        if (savedPoints.FirstOrDefault(a => a.Id == id) is not { } a) return;
+        Location.Set(a.Id, a.Label, a.Latitude, a.Longitude);
+        await ReloadAsync();
+    }
+
+    private async Task UseDeviceLocation()
+    {
+        locating = true;
+        locationError = null;
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/map.js");
+            var p = await module.InvokeAsync<GeoResult?>("locate");
+            if (p is null) locationError = "Không lấy được vị trí. Hãy cho phép truy cập vị trí trong trình duyệt hoặc chọn địa chỉ đã lưu.";
+            else
+            {
+                Location.Set(0, "Vị trí hiện tại", p.Lat, p.Lng);
+                await ReloadAsync();
+            }
+        }
+        catch (JSException) { locationError = "Trình duyệt không hỗ trợ lấy vị trí."; }
+        finally { locating = false; }
+    }
+
+    private sealed record GeoResult(double Lat, double Lng);
 }

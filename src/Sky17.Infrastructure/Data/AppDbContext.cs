@@ -119,9 +119,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 
         b.Entity<Cart>(e =>
         {
-            e.HasIndex(x => x.UserId).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.StoreId }).IsUnique();
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<CartItem>(e =>

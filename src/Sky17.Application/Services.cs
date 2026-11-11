@@ -8,19 +8,28 @@ public interface ICatalogService
     Task<IReadOnlyList<StoreCardDto>> GetStoresAsync(string? search = null, int take = 30, CancellationToken ct = default);
     Task<StoreDetailDto?> GetStoreAsync(int storeId, CancellationToken ct = default);
     Task<IReadOnlyList<ProductCardDto>> SearchProductsAsync(ProductQuery query, CancellationToken ct = default);
+    /// <summary>Dish search grouped by store, stores ordered by straight-line distance from the given point (nearest first).</summary>
+    Task<IReadOnlyList<StoreSearchGroupDto>> SearchByStoreAsync(StoreSearchQuery query, CancellationToken ct = default);
     Task<ProductDetailDto?> GetProductAsync(int productId, CancellationToken ct = default);
     Task<bool> IsServiceAvailableAsync(CancellationToken ct = default);
     Task<string> GetBrandNameAsync(CancellationToken ct = default);
 }
 
+/// <summary>A customer has one cart per store; each cart is checked out separately.</summary>
 public interface ICartService
 {
-    Task<CartDto> GetAsync(CancellationToken ct = default);
-    Task<AddToCartResult> AddAsync(int productId, int quantity = 1, bool replaceOtherStore = false, CancellationToken ct = default);
+    /// <summary>All non-empty carts of the current customer (most recently changed first).</summary>
+    Task<IReadOnlyList<CartDto>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>The cart for one store (empty when the customer has none).</summary>
+    Task<CartDto> GetAsync(int storeId, CancellationToken ct = default);
+    /// <summary>Total item count across all carts (header badge).</summary>
+    Task<int> CountAsync(CancellationToken ct = default);
+    /// <summary>Adds to the cart of the product&apos;s store (created on demand).</summary>
+    Task<AddToCartResult> AddAsync(int productId, int quantity = 1, CancellationToken ct = default);
     Task<CartDto> SetQuantityAsync(int productId, int quantity, CancellationToken ct = default);
-    Task<CartDto> ClearAsync(CancellationToken ct = default);
-    /// <summary>Delivery fee preview for the current cart to the given drop-off point (road distance via routing service).</summary>
-    Task<DeliveryQuoteDto> QuoteAsync(double? latitude, double? longitude, CancellationToken ct = default);
+    Task ClearAsync(int storeId, CancellationToken ct = default);
+    /// <summary>Delivery fee preview for one store cart to the given drop-off point (road distance via routing service).</summary>
+    Task<DeliveryQuoteDto> QuoteAsync(int storeId, double? latitude, double? longitude, CancellationToken ct = default);
 }
 
 public interface ICustomerOrderService

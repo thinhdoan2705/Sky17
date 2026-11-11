@@ -157,7 +157,7 @@ public sealed class TestApp : IAsyncDisposable
         {
             await c.Get<ICartService>().AddAsync(pa, 2);
             await c.Get<ICartService>().AddAsync(pb, 1);
-            placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(Checkout());
+            placed = await c.PlaceOrderAsync(Checkout());
         }
         using (var s = As(owner))
         {
@@ -210,4 +210,14 @@ public sealed class FakeClock : IClock
     public TimeSpan Offset { get; set; }
     public DateTime UtcNow => DateTime.UtcNow + Offset;
     public void Advance(TimeSpan by) => Offset += by;
+}
+
+public static class CheckoutTestExtensions
+{
+    /// <summary>Places an order for the user's store cart; when StoreId is not set, uses the user's only cart.</summary>
+    public static async Task<PlaceOrderResult> PlaceOrderAsync(this AsUser c, CheckoutInput input)
+    {
+        if (input.StoreId == 0 && await c.Get<ICartService>().GetAllAsync() is { Count: 1 } carts) input.StoreId = carts[0].StoreId!.Value;
+        return await c.Get<ICustomerOrderService>().PlaceOrderAsync(input);
+    }
 }

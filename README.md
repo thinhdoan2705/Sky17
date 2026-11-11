@@ -48,7 +48,7 @@ Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLO
 ## Portals
 | URL | Who | Highlights |
 |---|---|---|
-| `/` | Public / Customer | Home, search, stores, product, cart (single store), checkout (COD), tracking timeline, order history, addresses, profile, notifications |
+| `/` | Public / Customer | Home, dish search grouped by store (nearest first, km shown), stores, product, one cart per store, checkout per store (COD), tracking timeline, order history, addresses, profile, notifications |
 | `/seller` | Seller (Owner/Staff) | Dashboard, incoming orders (accept/reject, “Món đã sẵn sàng”, live driver progress), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
 | `/driver` | Driver | Online/offline + GPS heartbeat, ringing 30 s offer popup (accept/decline), trip steps (đến quán → lấy món → đến nơi → giao), cancel trip, failure report, maps & navigation, earnings & COD wallet, trip history, profile |
 | `/admin` | Admin | Live KPIs, orders (filter/paging/timeline/assign/reassign/cancel/failed review/distance override), stores & drivers approval, customers, COD & settlements, users & roles, settings, audit log, notification history |
@@ -72,7 +72,7 @@ dotnet ef migrations add <Name> -p src/Sky17.Infrastructure -s src/Sky17.Web -o 
 Migrations are applied automatically at startup (`Database.MigrateAsync`).
 
 ## Tests
-`dotnet test` runs 89 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, phone-number login for customers, structured addresses (province/ward catalog), seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
+`dotnet test` runs 92 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, phone-number login for customers, structured addresses (province/ward catalog), per-store carts & checkout, store search by distance, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
 
 ## Manual end-to-end test guide
 1. **Admin login** — `/admin/login` as `admin@sky17.local` (sellers/drivers/customers are refused there) → lands on `/admin` with live KPIs.
@@ -80,7 +80,7 @@ Migrations are applied automatically at startup (`Database.MigrateAsync`).
 3. **Admin approves seller** — admin `/admin/stores` → tab *Chờ duyệt* → *Phê duyệt*. The seller receives a realtime notification.
 4. **Seller creates products** — `/seller/products/new`, save, then upload an image (JPG/PNG/WebP ≤ 2 MB). Set store hours in `/seller/store` if needed.
 5. **Customer registration** — `/Account/Register` (Khách hàng). The **phone number is the login name** (unique, `+84…` accepted and normalized to `0…`); e-mail is only used for password recovery. Log in at `/login` with the phone number.
-6. **Customer order** — open the store, add products, `/cart` → *Tiến hành đặt hàng* → `/checkout` (số nhà/đường, chọn **Tỉnh/Thành phố → Phường/Xã**, optional *Chi tiết địa chỉ* such as building/floor) → *Đặt hàng ngay*. Tracking page opens; the seller's dashboard updates in realtime.
+6. **Customer order** — `/search` (stores nearest first, dishes inside each store) or open a store, add products (dishes from several stores go into separate carts), `/cart` → *Đặt đơn tại …* for one store → `/checkout/{storeId}` (số nhà/đường, chọn **Tỉnh/Thành phố → Phường/Xã**, optional *Chi tiết địa chỉ* such as building/floor) → *Đặt hàng ngay*. Tracking page opens; the seller's dashboard updates in realtime.
 7. **Seller confirms** — `/seller/orders` → *Nhận đơn* (driver search starts at once); later *Món đã sẵn sàng*. The customer page updates live.
 8. **Driver registration & approval** — register with `?kind=driver`; admin `/admin/drivers` → *Duyệt*. The driver turns the online switch on and allows location (or pins a spot in *Hồ sơ & vị trí*).
 9. **Driver accepts** — the nearest free driver’s screen rings with a 30 s popup → *Nhận chuyến* (or *Bỏ qua* / let it expire to see it go to the next driver).

@@ -80,6 +80,7 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<RealtimeState>();
 builder.Services.AddScoped<SellerContext>();
 builder.Services.AddScoped<CartState>();
+builder.Services.AddScoped<CustomerLocation>();
 if (!builder.Configuration.GetValue<bool>("Dispatch:DisableWorker"))
     builder.Services.AddHostedService<DispatchWorker>();
 

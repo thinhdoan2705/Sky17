@@ -27,6 +27,11 @@ public sealed record StoreDetailDto(
     StoreCardDto Store, string? Description, string PhoneNumber,
     IReadOnlyList<CategoryDto> Categories, IReadOnlyList<ProductCardDto> Products);
 
+public sealed record StoreSearchQuery(string? Search = null, int? CategoryId = null, double? Latitude = null, double? Longitude = null, int MaxStores = 30, int MaxProductsPerStore = 12);
+
+/// <summary>A store with the dishes that matched the search. DistanceKm is straight-line from the customer&apos;s point (null when unknown).</summary>
+public sealed record StoreSearchGroupDto(StoreCardDto Store, double? DistanceKm, IReadOnlyList<ProductCardDto> Products, int MatchedCount, bool StoreNameMatched);
+
 public sealed record ProductQuery(string? Search = null, int? CategoryId = null, int? StoreId = null, int Take = 40);
 
 // ---------------------------------------------------------------- Cart & checkout
@@ -42,10 +47,18 @@ public sealed record CartDto(
     public bool CanCheckout => !IsEmpty && StoreCanReceiveOrders && ServiceAvailable && Warnings.Count == 0;
 }
 
-public sealed record AddToCartResult(bool Success, bool RequiresStoreSwitch, string Message, CartDto? Cart);
+public sealed record AddToCartResult(bool Success, string Message, CartDto? Cart)
+{
+    /// <summary>Items across all of the customer&apos;s carts (header badge).</summary>
+    public int TotalItems { get; init; }
+}
 
 public sealed class CheckoutInput
 {
+    /// <summary>Which store cart is being checked out (one order per store).</summary>
+    [Range(1, int.MaxValue, ErrorMessage = "Giỏ hàng không hợp lệ")]
+    public int StoreId { get; set; }
+
     [Required(ErrorMessage = "Vui lòng nhập tên người nhận")]
     [StringLength(100)]
     public string RecipientName { get; set; } = "";

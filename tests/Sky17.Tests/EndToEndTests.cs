@@ -74,7 +74,7 @@ public class EndToEndTests
         using (var c = app.As(customer))
         {
             await c.Get<ICartService>().AddAsync(productId, 2);
-            order = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+            order = await c.PlaceOrderAsync(TestApp.Checkout());
         }
 
         // 7. Seller confirms and prepares

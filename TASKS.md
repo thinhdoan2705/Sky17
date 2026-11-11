@@ -16,7 +16,7 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 - ✅ Four layouts (sidebar + topbar desktop, bottom tabs mobile; driver mobile-first)
 
 ## Phase 2 — Seller, Customer, checkout
-- ✅ Customer: home (address, search, category chips, featured stores, products), search, stores, store detail, product detail, cart (qty/remove/clear, single-store switch), checkout (saved addresses, note, COD), order confirmation & live tracking timeline, order history, cancel while Pending, addresses CRUD, profile, notifications
+- ✅ Customer: home (address, search, category chips, featured stores, products), search, stores, store detail, product detail, cart (one cart per store, qty/remove/clear per store), checkout per store (saved addresses, note, COD), order confirmation & live tracking timeline, order history, cancel while Pending, addresses CRUD, profile, notifications
 - ✅ Checkout: server-side prices, atomic stock reservation, price/address snapshots, idempotency key, service-availability & store-hours checks
 - ✅ Seller: dashboard (live KPIs, action list, 7-day chart, top products), orders (tabs, search, paging, quick actions), order detail (accept/reject with reason, preparing, ready), product CRUD + stock + availability + soft delete, product images (validated upload), categories (store + platform), sales report (date range), settlements (owner only), store profile & business hours & open/closed switch, members (owner/staff)
 - ✅ Multi-store seller switcher; membership checked on every service call
@@ -42,6 +42,9 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 - ✅ **Customer login by phone number** (normalized VN number as login name, unique; partners keep e-mail login; existing customer accounts converted at startup). 11 tests.
 - ✅ **Separate login pages** `/login`, `/seller/login`, `/driver/login`, `/admin/login` (role-checked per portal, `/Account/Login` forwards by return URL, partner logout returns to its login page).
 - ✅ **Structured addresses** — Số nhà/đường + Phường/Xã + Tỉnh/Thành (34 provinces, 3,321 wards, 2025 catalog v5.2.0) + optional “Chi tiết địa chỉ”; province→ward picker with accent-insensitive filter in the address book and checkout; server validates the ward belongs to the province and composes the address. Migration `StructuredAddress`. 7 tests.
+- ✅ **Search grouped by store** — dishes listed inside their store, stores sorted nearest first with the km next to the name (from a saved address or device location). 1 test.
+- ✅ **One cart per store** — separate carts, each checked out as its own order (`/checkout/{storeId}`); other carts untouched. Migration `CartPerStore`. 2 tests.
+- 🟡 **Store pins** — stores created before the map feature have no coordinates and show “? km” in search until the seller pins the location in *Hồ sơ cửa hàng*.
 - ⬜ **Store addresses** — still a single free-text field (registration and store profile); could reuse `AdminUnitPicker`.
 - ⬜ **SMS / OTP** — phone numbers are not verified by OTP and password reset still goes through e-mail; needs an SMS provider.
 - ⬜ **Real e-mail delivery** — reset links are only logged in Development; implement `IEmailSender<ApplicationUser>` (SMTP / provider) for production. Email confirmation is therefore off.

@@ -135,11 +135,12 @@ public class ProductImage : AuditableEntity
 // ---------------------------------------------------------------- Cart
 
 /// <summary>Single-store cart (Lite MVP). One cart per user.</summary>
+/// <summary>One cart per (customer, store). Each cart is checked out on its own.</summary>
 public class Cart : AuditableEntity
 {
     public required string UserId { get; set; }
-    public int? StoreId { get; set; }
-    public Store? Store { get; set; }
+    public int StoreId { get; set; }
+    public Store Store { get; set; } = null!;
     public ICollection<CartItem> Items { get; set; } = [];
 }
 

@@ -53,7 +53,7 @@
         Cart.Changed += OnCartChanged;
         if (AuthState is not null && (await AuthState).User.IsInRole(Roles.Customer))
         {
-            try { Cart.Set(await CartService.GetAsync()); } catch (ForbiddenException) { }
+            try { Cart.Set(await CartService.CountAsync()); } catch (ForbiddenException) { }
         }
     }
 

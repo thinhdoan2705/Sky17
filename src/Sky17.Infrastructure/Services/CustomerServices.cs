@@ -89,6 +89,58 @@ public sealed class CatalogService(IDbContextFactory<AppDbContext> dbf, IClock c
         return await ProductCards(q).Take(Math.Clamp(query.Take, 1, 100)).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<StoreSearchGroupDto>> SearchByStoreAsync(StoreSearchQuery query, CancellationToken ct = default)
+    {
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var term = query.Search.Clean();
+        var origin = GeoPoint.From(query.Latitude, query.Longitude);
+        var perStore = Math.Clamp(query.MaxProductsPerStore, 1, 50);
+
+        var stores = await db.Stores.AsNoTracking().Where(s => s.Status == StoreStatus.Active)
+            .Select(s => new { Store = s, Count = s.Products.Count(p => p.IsActive) }).ToListAsync(ct);
+
+        // Dishes matching the keyword (name, description or category) and/or the category filter.
+        var pq = db.Products.AsQueryable();
+        if (query.CategoryId is { } cid) pq = pq.Where(p => p.CategoryId == cid);
+        if (term is not null)
+        {
+            var like = $"%{term}%";
+            pq = pq.Where(p => EF.Functions.Like(p.Name, like) || EF.Functions.Like(p.Description ?? "", like)
+                || (p.Category != null && EF.Functions.Like(p.Category.Name, like)));
+        }
+        var matched = term is null && query.CategoryId is null ? [] : await ProductCards(pq).ToListAsync(ct);
+
+        // Stores whose name/tagline matches show their menu even when no single dish matched.
+        var nameMatched = term is null
+            ? (query.CategoryId is null ? stores.Select(s => s.Store.Id).ToHashSet() : [])
+            : stores.Where(s => Contains(s.Store.Name, term) || Contains(s.Store.Tagline, term)).Select(s => s.Store.Id).ToHashSet();
+        var menuStoreIds = nameMatched.Where(id => !matched.Any(p => p.StoreId == id)).ToList();
+        var menus = menuStoreIds.Count == 0 ? [] : await ProductCards(db.Products.Where(p => menuStoreIds.Contains(p.StoreId))).ToListAsync(ct);
+
+        var now = LocalNow;
+        var groups = new List<StoreSearchGroupDto>();
+        foreach (var s in stores)
+        {
+            var hits = matched.Where(p => p.StoreId == s.Store.Id).ToList();
+            var fromName = nameMatched.Contains(s.Store.Id);
+            if (hits.Count == 0 && !fromName) continue;
+            var list = (hits.Count > 0 ? hits : menus.Where(p => p.StoreId == s.Store.Id).ToList())
+                .OrderByDescending(p => p.IsAvailable).ThenBy(p => p.Name).ToList();
+            double? km = origin is not null && GeoPoint.From(s.Store.Latitude, s.Store.Longitude) is { } sp
+                ? Math.Round(origin.Value.StraightLineMetersTo(sp) / 1000.0, 1)
+                : null;
+            groups.Add(new StoreSearchGroupDto(ToCard(s.Store, s.Count, now), km, list.Take(perStore).ToList(), list.Count, term is not null && fromName && hits.Count == 0));
+        }
+
+        // Nearest store first; stores without a map pin (unknown distance) go last.
+        return groups.OrderBy(g => g.DistanceKm is null).ThenBy(g => g.DistanceKm).ThenBy(g => g.Store.Name)
+            .Take(Math.Clamp(query.MaxStores, 1, 100)).ToList();
+    }
+
+    private static bool Contains(string? text, string term) =>
+        text is not null && System.Globalization.CultureInfo.GetCultureInfo("vi-VN").CompareInfo
+            .IndexOf(text, term, System.Globalization.CompareOptions.IgnoreCase) >= 0;
+
     public async Task<ProductDetailDto?> GetProductAsync(int productId, CancellationToken ct = default)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
@@ -119,30 +171,44 @@ public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUse
     private static IQueryable<Cart> CartGraph(AppDbContext db) =>
         db.Carts.Include(c => c.Store).Include(c => c.Items).ThenInclude(i => i.Product).ThenInclude(p => p.Images);
 
-    private async Task<Cart> GetOrCreateAsync(AppDbContext db, string uid, CancellationToken ct)
-    {
-        var cart = await CartGraph(db).FirstOrDefaultAsync(c => c.UserId == uid, ct);
-        if (cart is not null) return cart;
-        cart = new Cart { UserId = uid };
-        db.Carts.Add(cart);
-        await db.SaveChangesAsync(ct);
-        return cart;
-    }
+    private static CartDto Empty(int? storeId, bool serviceOn) => new(storeId, null, false, [], 0, 0, 0, serviceOn, []);
 
-    public async Task<CartDto> GetAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CartDto>> GetAllAsync(CancellationToken ct = default)
     {
         var current = await users.GetAsync(ct);
-        if (!current.IsInRole(Roles.Customer)) return new CartDto(null, null, false, [], 0, 0, 0, true, []);
+        if (!current.IsInRole(Roles.Customer)) return [];
         await using var db = await dbf.CreateDbContextAsync(ct);
-        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == current.UserId, ct);
-        return await ToDtoAsync(db, cart, ct);
+        var carts = await CartGraph(db).AsNoTracking().Where(c => c.UserId == current.UserId && c.Items.Any()).ToListAsync(ct);
+        var result = new List<CartDto>();
+        foreach (var c in carts.OrderByDescending(c => c.UpdatedAtUtc ?? c.CreatedAtUtc)) result.Add(await ToDtoAsync(db, c, ct));
+        return result;
     }
+
+    public async Task<CartDto> GetAsync(int storeId, CancellationToken ct = default)
+    {
+        var current = await users.GetAsync(ct);
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        if (!current.IsInRole(Roles.Customer)) return Empty(storeId, true);
+        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == current.UserId && c.StoreId == storeId, ct);
+        return cart is null ? Empty(storeId, await Settings.ServiceAvailableAsync(db, ct)) : await ToDtoAsync(db, cart, ct);
+    }
+
+    public async Task<int> CountAsync(CancellationToken ct = default)
+    {
+        var current = await users.GetAsync(ct);
+        if (!current.IsInRole(Roles.Customer)) return 0;
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        return await CountAsync(db, current.UserId!, ct);
+    }
+
+    private static async Task<int> CountAsync(AppDbContext db, string uid, CancellationToken ct) =>
+        await db.CartItems.Where(i => i.Cart.UserId == uid).SumAsync(i => (int?)i.Quantity, ct) ?? 0;
 
     internal async Task<CartDto> ToDtoAsync(AppDbContext db, Cart? cart, CancellationToken ct)
     {
         var rule = await Settings.GetRateRuleAsync(db, ct);
         var serviceOn = await Settings.ServiceAvailableAsync(db, ct);
-        if (cart is null || cart.Items.Count == 0) return new CartDto(null, null, false, [], 0, 0, 0, serviceOn, []);
+        if (cart is null || cart.Items.Count == 0) return Empty(cart?.StoreId, serviceOn);
 
         var warnings = new List<string>();
         var lines = new List<CartLineDto>();
@@ -157,13 +223,20 @@ public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUse
         }
         var subtotal = lines.Sum(l => l.LineTotal);
         var fee = DeliveryPricing.CalculateFee(rule, null);
-        var storeOk = cart.Store?.CanReceiveOrders(TimeOnly.FromDateTime(VnTime.ToLocal(clock.UtcNow))) ?? false;
+        var storeOk = cart.Store.CanReceiveOrders(TimeOnly.FromDateTime(VnTime.ToLocal(clock.UtcNow)));
         if (!storeOk) warnings.Add("Cửa hàng hiện đang đóng cửa hoặc tạm ngưng nhận đơn.");
         if (!serviceOn) warnings.Add("Dịch vụ giao hàng đang tạm ngưng.");
-        return new CartDto(cart.StoreId, cart.Store?.Name, storeOk, lines, subtotal, fee, subtotal + fee, serviceOn, warnings);
+        return new CartDto(cart.StoreId, cart.Store.Name, storeOk, lines, subtotal, fee, subtotal + fee, serviceOn, warnings);
     }
 
-    public async Task<AddToCartResult> AddAsync(int productId, int quantity = 1, bool replaceOtherStore = false, CancellationToken ct = default)
+    private async Task<CartDto> FreshAsync(AppDbContext db, string uid, int storeId, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == uid && c.StoreId == storeId, ct);
+        return await ToDtoAsync(db, cart, ct) with { StoreId = storeId };
+    }
+
+    public async Task<AddToCartResult> AddAsync(int productId, int quantity = 1, CancellationToken ct = default)
     {
         var uid = await UserAsync(ct);
         if (quantity is < 1 or > 99) throw new DomainException("Số lượng không hợp lệ.");
@@ -171,69 +244,72 @@ public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUse
         var product = await db.Products.AsNoTracking().Include(p => p.Store)
             .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive && p.Store.Status == StoreStatus.Active, ct)
             ?? throw new NotFoundException("Sản phẩm không tồn tại hoặc đã ngừng bán.");
-        if (!product.IsAvailable || product.Stock <= 0) return new AddToCartResult(false, false, "Sản phẩm tạm hết hàng.", null);
+        if (!product.IsAvailable || product.Stock <= 0) return new AddToCartResult(false, "Sản phẩm tạm hết hàng.", null);
 
-        var cart = await GetOrCreateAsync(db, uid, ct);
-        if (cart.Items.Count > 0 && cart.StoreId != product.StoreId)
+        // Each store has its own cart; adding never touches the customer's other carts.
+        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.UserId == uid && c.StoreId == product.StoreId, ct);
+        if (cart is null)
         {
-            if (!replaceOtherStore)
-                return new AddToCartResult(false, true, $"Giỏ hàng đang có món của {cart.Store?.Name}. Mỗi đơn chỉ đặt từ một cửa hàng.", null);
-            db.CartItems.RemoveRange(cart.Items);
-            cart.Items.Clear();
+            cart = new Cart { UserId = uid, StoreId = product.StoreId };
+            db.Carts.Add(cart);
         }
-        cart.StoreId = product.StoreId;
         var item = cart.Items.FirstOrDefault(i => i.ProductId == productId);
         var newQty = (item?.Quantity ?? 0) + quantity;
-        if (newQty > product.Stock) return new AddToCartResult(false, false, $"Chỉ còn {product.Stock} phần “{product.Name}”.", null);
-        if (item is null) db.CartItems.Add(new CartItem { CartId = cart.Id, ProductId = productId, Quantity = newQty });
+        if (newQty > product.Stock) return new AddToCartResult(false, $"Chỉ còn {product.Stock} phần “{product.Name}”.", null);
+        if (item is null) cart.Items.Add(new CartItem { ProductId = productId, Quantity = newQty });
         else item.Quantity = newQty;
-        await db.SaveAsync(ct);
+        cart.UpdatedAtUtc = clock.UtcNow;
+        try { await db.SaveAsync(ct); }
+        catch (DbUpdateException) when (cart.Id == 0)
+        {
+            // Two concurrent first adds for the same store: the unique (user, store) index keeps one cart; retry once.
+            db.ChangeTracker.Clear();
+            return await AddAsync(productId, quantity, ct);
+        }
 
-        db.ChangeTracker.Clear();
-        var fresh = await CartGraph(db).AsNoTracking().FirstAsync(c => c.Id == cart.Id, ct);
-        return new AddToCartResult(true, false, $"Đã thêm “{product.Name}” vào giỏ", await ToDtoAsync(db, fresh, ct));
+        var dto = await FreshAsync(db, uid, product.StoreId, ct);
+        return new AddToCartResult(true, $"Đã thêm “{product.Name}” vào giỏ {product.Store.Name}", dto) { TotalItems = await CountAsync(db, uid, ct) };
     }
 
     public async Task<CartDto> SetQuantityAsync(int productId, int quantity, CancellationToken ct = default)
     {
         var uid = await UserAsync(ct);
         await using var db = await dbf.CreateDbContextAsync(ct);
-        var cart = await GetOrCreateAsync(db, uid, ct);
-        var item = cart.Items.FirstOrDefault(i => i.ProductId == productId);
-        if (item is not null)
+        var item = await db.CartItems.Include(i => i.Product).Include(i => i.Cart).ThenInclude(c => c.Items)
+            .FirstOrDefaultAsync(i => i.ProductId == productId && i.Cart.UserId == uid, ct)
+            ?? throw new NotFoundException("Món này không có trong giỏ.");
+        var cart = item.Cart;
+        if (quantity <= 0)
         {
-            if (quantity <= 0) db.CartItems.Remove(item);
-            else
-            {
-                if (quantity > item.Product.Stock) throw new DomainException($"Chỉ còn {item.Product.Stock} phần “{item.Product.Name}”.");
-                item.Quantity = Math.Min(quantity, 99);
-            }
-            if (cart.Items.Count(i => i != item || quantity > 0) == 0) cart.StoreId = null;
-            await db.SaveAsync(ct);
+            db.CartItems.Remove(item);
+            // An empty store cart disappears from the cart list.
+            if (cart.Items.Count == 1) db.Carts.Remove(cart);
         }
-        db.ChangeTracker.Clear();
-        return await ToDtoAsync(db, await CartGraph(db).AsNoTracking().FirstAsync(c => c.Id == cart.Id, ct), ct);
-    }
-
-    public async Task<CartDto> ClearAsync(CancellationToken ct = default)
-    {
-        var uid = await UserAsync(ct);
-        await using var db = await dbf.CreateDbContextAsync(ct);
-        var cart = await GetOrCreateAsync(db, uid, ct);
-        db.CartItems.RemoveRange(cart.Items);
-        cart.StoreId = null;
+        else
+        {
+            if (quantity > item.Product.Stock) throw new DomainException($"Chỉ còn {item.Product.Stock} phần “{item.Product.Name}”.");
+            item.Quantity = Math.Min(quantity, 99);
+            cart.UpdatedAtUtc = clock.UtcNow;
+        }
         await db.SaveAsync(ct);
-        return await ToDtoAsync(db, null, ct);
+        return await FreshAsync(db, uid, cart.StoreId, ct);
     }
 
-    public async Task<DeliveryQuoteDto> QuoteAsync(double? latitude, double? longitude, CancellationToken ct = default)
+    public async Task ClearAsync(int storeId, CancellationToken ct = default)
     {
         var uid = await UserAsync(ct);
         await using var db = await dbf.CreateDbContextAsync(ct);
-        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == uid, ct);
+        await db.Carts.Where(c => c.UserId == uid && c.StoreId == storeId).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task<DeliveryQuoteDto> QuoteAsync(int storeId, double? latitude, double? longitude, CancellationToken ct = default)
+    {
+        var uid = await UserAsync(ct);
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == uid && c.StoreId == storeId, ct);
         var rule = await Settings.GetRateRuleAsync(db, ct);
         var subtotal = cart?.Items.Sum(i => i.Product.Price * i.Quantity) ?? 0;
-        if (cart?.Store is null) return new DeliveryQuoteDto(null, rule.BaseFee, subtotal, subtotal + rule.BaseFee, false);
+        if (cart is null) return new DeliveryQuoteDto(null, rule.BaseFee, subtotal, subtotal + rule.BaseFee, false);
         var (meters, fee, _) = await DeliveryQuote.CalculateAsync(routing, rule, cart.Store, GeoPoint.From(latitude, longitude), ct);
         return new DeliveryQuoteDto(meters, fee, subtotal, subtotal + fee, cart.Store.Latitude is not null);
     }
@@ -261,8 +337,9 @@ public sealed class CustomerOrderService(
 
         if (!await Settings.ServiceAvailableAsync(db, ct)) throw new DomainException("Dịch vụ giao hàng đang tạm ngưng, vui lòng quay lại sau.");
 
-        var cart = await db.Carts.Include(c => c.Items).Include(c => c.Store).FirstOrDefaultAsync(c => c.UserId == uid, ct);
-        if (cart is null || cart.Items.Count == 0 || cart.Store is null) throw new DomainException("Giỏ hàng đang trống.");
+        // One order per store cart: only the cart of the requested store is checked out.
+        var cart = await db.Carts.Include(c => c.Items).Include(c => c.Store).FirstOrDefaultAsync(c => c.UserId == uid && c.StoreId == input.StoreId, ct);
+        if (cart is null || cart.Items.Count == 0) throw new DomainException("Giỏ hàng của cửa hàng này đang trống.");
         var store = cart.Store;
         var now = clock.UtcNow;
         if (!store.CanReceiveOrders(TimeOnly.FromDateTime(VnTime.ToLocal(now))))
@@ -330,8 +407,8 @@ public sealed class CustomerOrderService(
         order.History.Add(new OrderStatusHistory { NewStatus = OrderStatus.Pending, ChangedByUserId = uid, ChangedAtUtc = now, Reason = "Khách hàng đặt đơn" });
         db.Orders.Add(order);
 
-        db.CartItems.RemoveRange(cart.Items);
-        cart.StoreId = null;
+        // The checked-out store cart is removed; the customer's other store carts stay untouched.
+        db.Carts.Remove(cart);
 
         if (input.SaveAddress && !await db.Addresses.AnyAsync(a => a.UserId == uid && a.Street == street && a.WardCode == ward.Code, ct))
         {

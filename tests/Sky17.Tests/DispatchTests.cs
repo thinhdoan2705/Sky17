@@ -219,7 +219,7 @@ public class DispatchTests
         using (var c = app.As(customer))
         {
             await c.Get<ICartService>().AddAsync(pa, 3);
-            placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+            placed = await c.PlaceOrderAsync(TestApp.Checkout());
         }
         Assert.Equal(0, (await app.Dispatch.RunCycleAsync()).OrdersAutoCancelled);
         app.Clock.Advance(TimeSpan.FromMinutes(11));

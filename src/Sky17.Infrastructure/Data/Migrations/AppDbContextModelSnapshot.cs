@@ -265,7 +265,7 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("StoreId")
+                    b.Property<int>("StoreId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
@@ -279,7 +279,7 @@ namespace Sky17.Infrastructure.Data.Migrations
 
                     b.HasIndex("StoreId");
 
-                    b.HasIndex("UserId")
+                    b.HasIndex("UserId", "StoreId")
                         .IsUnique();
 
                     b.ToTable("Carts");
@@ -1433,7 +1433,8 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.HasOne("Sky17.Domain.Store", "Store")
                         .WithMany()
                         .HasForeignKey("StoreId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("Sky17.Infrastructure.Data.ApplicationUser", null)
                         .WithMany()

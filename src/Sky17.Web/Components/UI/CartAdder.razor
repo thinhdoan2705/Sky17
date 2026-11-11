@@ -1,17 +1,11 @@
-@* Shared add-to-cart logic: login redirect, role check, single-store switch confirmation. Use via @ref. *@
+@* Shared add-to-cart logic: login redirect and role check. Each store has its own cart, so adding never replaces another store's items. Use via @ref. *@
 @inject ICartService CartService
 @inject CartState Cart
 @inject ToastService Toasts
 @inject NavigationManager Nav
 
-<ConfirmDialog Open="pending is not null" OpenChanged="v => { if (!v) pending = null; }" Title="Đổi cửa hàng?"
-               Message="@($"{message} Bạn có muốn xóa giỏ hiện tại và thêm món mới?")" ConfirmText="Xóa giỏ & thêm món"
-               Busy="busy" OnConfirm="ReplaceAsync" />
-
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
-    private (int ProductId, int Qty)? pending;
-    private string message = "";
     private bool busy;
 
     public async Task AddAsync(int productId, int quantity = 1)
@@ -27,24 +21,14 @@
             Toasts.Error("Chỉ tài khoản khách hàng mới có thể đặt món.");
             return;
         }
-        await AddCoreAsync(productId, quantity, false);
-    }
-
-    private async Task AddCoreAsync(int productId, int quantity, bool replace)
-    {
+        if (busy) return;
         busy = true;
         try
         {
-            var r = await CartService.AddAsync(productId, quantity, replace);
-            if (r.RequiresStoreSwitch)
+            var r = await CartService.AddAsync(productId, quantity);
+            if (r.Success)
             {
-                pending = (productId, quantity);
-                message = r.Message;
-            }
-            else if (r.Success)
-            {
-                pending = null;
-                Cart.Set(r.Cart!);
+                Cart.Set(r.TotalItems);
                 Toasts.Success(r.Message);
             }
             else
@@ -59,9 +43,6 @@
         finally
         {
             busy = false;
-            StateHasChanged();
         }
     }
-
-    private Task ReplaceAsync(string _) => pending is { } p ? AddCoreAsync(p.ProductId, p.Qty, true) : Task.CompletedTask;
 }

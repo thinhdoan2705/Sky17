@@ -52,8 +52,16 @@ All money is `long` VND. Commission and driver share are basis points (`Platform
 - **Privacy:** store pickup pins are public; a customer's drop-off pin is only returned to that customer, the store, admin and the *assigned* driver (open jobs show pickup only).
 - **Production note:** public OSM tile, Nominatim and OSRM demo servers are for light use. For real traffic, self-host OSRM/Nominatim or use a commercial tile/geocoding provider and change the URLs (`Maps:OsrmBaseUrl`, `wwwroot/js/map.js`).
 
-## D9. Single-store cart
-A cart belongs to one store. Adding a product from another store asks the customer to clear the cart first.
+## D9. One cart per store (supersedes "single-store cart")
+- A customer has **one cart per store** (`Cart` unique on `(UserId, StoreId)`, `StoreId` NOT NULL, cascade-deleted with the store). Adding a dish from another store simply goes into that store's cart; nothing is replaced and there is no "switch store" prompt.
+- **Checkout is per store**: `/checkout/{storeId}` and `CheckoutInput.StoreId`; placing an order removes only that store's cart. Each order still has exactly one store (pickup, settlement and dispatch stay simple). `/checkout` without a store id redirects to the only cart, or to `/cart` when there are several.
+- `/cart` lists every store cart with its own summary, warnings (store closed, out of stock) and an "Đặt đơn tại …" button. Empty carts are deleted. The header badge is the total item count across carts.
+- Migration `CartPerStore` deletes store-less (empty) carts and replaces the unique index on `UserId` with `(UserId, StoreId)`; existing carts with a store are kept.
+
+## D16. Dish search grouped by store, nearest first
+- `/search` (`ICatalogService.SearchByStoreAsync`) returns **stores, each with its matching dishes** (dish name, description or category; a store whose name/tagline matches shows its menu). Without a keyword it lists all stores with their menus.
+- Stores are sorted by **straight-line distance, nearest first**, and the distance is shown next to the store name ("2,7 km"). Stores without a map pin come last with "? km". Straight-line (haversine) is used because routing every store through OSRM on each search would be slow and abuse the free server; the delivery fee still uses road distance at checkout (D8).
+- Distance is measured from the customer's default **saved address with a pin**; they can switch to another saved address or to "Vị trí hiện tại" (browser geolocation). The choice is kept for the session (`CustomerLocation`, per circuit). Anonymous visitors can use the device location.
 
 ## D10. Realtime
 A dedicated SignalR hub `/hubs/notifications` (`[Authorize]`); each connection joins only `user:{id}`. Messages contain only the recipient's own notification. All notifications are also persisted (`Notification` table), so after a reconnect the client reloads from the database (`onreconnected` → page reload of data). The SignalR JS client is vendored at `wwwroot/lib/signalr` (8.0.7) — no runtime CDN dependency.

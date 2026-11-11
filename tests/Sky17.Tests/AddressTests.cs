@@ -35,7 +35,7 @@ public class AddressTests
         input.Street = "  118 Lê Hồng Phong ";
         input.AddressDetail = "Tòa A, tầng 3";
         input.SaveAddress = true;
-        var placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(input);
+        var placed = await c.PlaceOrderAsync(input);
 
         await using var db = await app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync();
         var order = await db.Orders.SingleAsync(o => o.Id == placed.OrderId);
@@ -66,7 +66,7 @@ public class AddressTests
         var input = TestApp.Checkout();
         input.ProvinceCode = province;
         input.WardCode = ward;
-        await Assert.ThrowsAnyAsync<Exception>(() => c.Get<ICustomerOrderService>().PlaceOrderAsync(input));
+        await Assert.ThrowsAnyAsync<Exception>(() => c.PlaceOrderAsync(input));
 
         await Assert.ThrowsAnyAsync<Exception>(() => c.Get<IAddressService>().SaveAsync(new AddressInput
         {

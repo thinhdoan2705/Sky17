@@ -4,77 +4,82 @@
 @inject ICartService CartService
 @inject CartState CartBadge
 
-<PageHeader Title="Giỏ hàng của bạn" Subtitle="@(cart?.StoreName is null ? "Mỗi đơn hàng đặt từ một cửa hàng" : $"Đặt từ {cart.StoreName}")">
-    <Actions>
-        @if (cart is { IsEmpty: false }) { <button class="btn btn-outline" @onclick="() => confirmClear = true">🗑 Xóa giỏ</button> }
-    </Actions>
-</PageHeader>
+<PageHeader Title="Giỏ hàng của bạn" Subtitle="@(carts.Count > 1 ? $"{carts.Count} giỏ hàng · mỗi cửa hàng đặt thành một đơn riêng" : "Mỗi cửa hàng có một giỏ hàng và được đặt riêng")" />
 
 @if (Loading) { <Skeleton Lines="5" /> }
-else if (cart is null || cart.IsEmpty)
+else if (carts.Count == 0)
 {
-    <div class="card"><EmptyState Icon="🛒" Title="Giỏ hàng đang trống" Text="Hãy chọn vài món ngon nhé!"><a class="btn" href="/">Khám phá món ăn</a></EmptyState></div>
+    <div class="card"><EmptyState Icon="🛒" Title="Giỏ hàng đang trống" Text="Hãy chọn vài món ngon nhé!"><a class="btn" href="/search">Tìm món ăn</a></EmptyState></div>
 }
 else
 {
-    <div class="checkout-grid">
-        <section class="card">
-            <div class="section-title"><h2>@cart.StoreName</h2><a class="link small" href="/stores/@cart.StoreId">+ Thêm món</a></div>
-            @foreach (var l in cart.Lines)
-            {
-                <div class="row-item">
-                    <div class="avatar" style="width:52px;height:52px;font-size:26px">
-                        @if (l.ImageUrl is not null) { <img src="@l.ImageUrl" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:11px" /> } else { @l.Emoji }
-                    </div>
-                    <div class="grow">
-                        <strong>@l.Name</strong>
-                        <span class="muted small">@Fmt.Vnd(l.UnitPrice)@(l.IsAvailable ? "" : " · Hết hàng")</span>
-                    </div>
-                    <div class="qty">
-                        <button aria-label="Giảm" disabled="@Busy" @onclick="() => SetQty(l.ProductId, l.Quantity - 1)">−</button>
-                        <span>@l.Quantity</span>
-                        <button aria-label="Tăng" disabled="@(Busy || l.Quantity >= l.Stock)" @onclick="() => SetQty(l.ProductId, l.Quantity + 1)">+</button>
-                    </div>
-                    <b style="min-width:80px;text-align:right">@Fmt.Vnd(l.LineTotal)</b>
-                    <button class="icon-btn" aria-label="Xóa @l.Name" disabled="@Busy" @onclick="() => SetQty(l.ProductId, 0)">✕</button>
+    @foreach (var cart in carts)
+    {
+        <div class="checkout-grid cart-store">
+            <section class="card">
+                <div class="section-title">
+                    <h2>🏪 @cart.StoreName</h2>
+                    <span class="flex">
+                        <a class="link small" href="/stores/@cart.StoreId">+ Thêm món</a>
+                        <button class="btn btn-ghost btn-sm danger-text" disabled="@Busy" @onclick="() => clearStoreId = cart.StoreId">🗑 Xóa giỏ</button>
+                    </span>
                 </div>
-            }
-        </section>
-        <aside class="card">
-            <h2>Tóm tắt</h2>
-            @foreach (var w in cart.Warnings) { <div class="alert alert-warning small">@w</div> }
-            <div class="order-line"><span class="muted">Tạm tính (@cart.Count món)</span><strong>@Fmt.Vnd(cart.Subtotal)</strong></div>
-            <div class="order-line"><span class="muted">Phí giao hàng (cơ bản)</span><strong>@Fmt.Vnd(cart.DeliveryFee)</strong></div>
-            <div class="order-line total"><span>Tổng cộng</span><span class="primary-text">@Fmt.Vnd(cart.Total)</span></div>
-            <p class="small muted">Phí giao áp dụng mức cơ bản; nếu quãng đường dài hơn, quản trị viên có thể cập nhật và bạn sẽ được thông báo trước khi giao.</p>
-            <div class="sticky-action">
-                <a class="btn btn-block @(cart.CanCheckout ? "" : "disabled")" href="@(cart.CanCheckout ? "/checkout" : null)" aria-disabled="@(!cart.CanCheckout)"
-                   style="@(cart.CanCheckout ? "" : "opacity:.5;pointer-events:none")">Tiến hành đặt hàng →</a>
-            </div>
-        </aside>
-    </div>
+                @foreach (var l in cart.Lines)
+                {
+                    <div class="row-item">
+                        <div class="avatar" style="width:52px;height:52px;font-size:26px">
+                            @if (l.ImageUrl is not null) { <img src="@l.ImageUrl" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:11px" /> } else { @l.Emoji }
+                        </div>
+                        <div class="grow">
+                            <strong>@l.Name</strong>
+                            <span class="muted small">@Fmt.Vnd(l.UnitPrice)@(l.IsAvailable ? "" : " · Hết hàng")</span>
+                        </div>
+                        <div class="qty">
+                            <button aria-label="Giảm" disabled="@Busy" @onclick="() => SetQty(l.ProductId, l.Quantity - 1)">−</button>
+                            <span>@l.Quantity</span>
+                            <button aria-label="Tăng" disabled="@(Busy || l.Quantity >= l.Stock)" @onclick="() => SetQty(l.ProductId, l.Quantity + 1)">+</button>
+                        </div>
+                        <b style="min-width:80px;text-align:right">@Fmt.Vnd(l.LineTotal)</b>
+                        <button class="icon-btn" aria-label="Xóa @l.Name" disabled="@Busy" @onclick="() => SetQty(l.ProductId, 0)">✕</button>
+                    </div>
+                }
+            </section>
+            <aside class="card">
+                <h2>Tóm tắt</h2>
+                @foreach (var w in cart.Warnings) { <div class="alert alert-warning small">@w</div> }
+                <div class="order-line"><span class="muted">Tạm tính (@cart.Count món)</span><strong>@Fmt.Vnd(cart.Subtotal)</strong></div>
+                <div class="order-line"><span class="muted">Phí giao hàng (cơ bản)</span><strong>@Fmt.Vnd(cart.DeliveryFee)</strong></div>
+                <div class="order-line total"><span>Tổng cộng</span><span class="primary-text">@Fmt.Vnd(cart.Total)</span></div>
+                <p class="small muted">Phí giao được tính lại theo quãng đường khi bạn ghim điểm giao ở bước thanh toán.</p>
+                <a class="btn btn-block" href="@(cart.CanCheckout ? $"/checkout/{cart.StoreId}" : null)" aria-disabled="@(!cart.CanCheckout)"
+                   style="@(cart.CanCheckout ? "" : "opacity:.5;pointer-events:none")">Đặt đơn tại @cart.StoreName →</a>
+            </aside>
+        </div>
+    }
 }
 
-<ConfirmDialog @bind-Open="confirmClear" Title="Xóa giỏ hàng?" Message="Tất cả món trong giỏ sẽ bị xóa." ConfirmText="Xóa giỏ" Danger="true" OnConfirm="Clear" />
+<ConfirmDialog Open="clearStoreId is not null" OpenChanged="v => { if (!v) clearStoreId = null; }" Title="Xóa giỏ hàng này?"
+               Message="Tất cả món của cửa hàng này sẽ bị xóa khỏi giỏ. Các giỏ của cửa hàng khác vẫn giữ nguyên."
+               ConfirmText="Xóa giỏ" Danger="true" OnConfirm="Clear" />
 
 @code {
-    private CartDto? cart;
-    private bool confirmClear;
+    private IReadOnlyList<CartDto> carts = [];
+    private int? clearStoreId;
 
     protected override async Task LoadAsync()
     {
-        cart = await CartService.GetAsync();
-        CartBadge.Set(cart);
+        carts = await CartService.GetAllAsync();
+        CartBadge.Set(carts.Sum(c => c.Count));
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
 
-    private Task SetQty(int productId, int qty) => RunAsync(async () => { cart = await CartService.SetQuantityAsync(productId, qty); CartBadge.Set(cart); }, reload: false);
+    private Task SetQty(int productId, int qty) => RunAsync(() => CartService.SetQuantityAsync(productId, qty));
 
     private Task Clear(string _) => RunAsync(async () =>
     {
-        confirmClear = false;
-        cart = await CartService.ClearAsync();
-        CartBadge.Set(cart);
-    }, "Đã xóa giỏ hàng", reload: false);
+        var id = clearStoreId!.Value;
+        clearStoreId = null;
+        await CartService.ClearAsync(id);
+    }, "Đã xóa giỏ hàng");
 }

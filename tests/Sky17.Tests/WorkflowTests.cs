@@ -121,7 +121,7 @@ public class SellerAuthorizationTests
         using (var c = app.As(customer))
         {
             await c.Get<ICartService>().AddAsync(productA);
-            await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+            await c.PlaceOrderAsync(TestApp.Checkout());
         }
         await seller.DeleteProductAsync(storeId, productA);
         await using (var db = app.Db()) Assert.False((await db.Products.FindAsync(productA))!.IsActive);
@@ -142,7 +142,7 @@ public class CheckoutTests
         Assert.Equal(90_000, cart.Subtotal);
         Assert.Equal(15_000, cart.DeliveryFee);
 
-        var placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+        var placed = await c.PlaceOrderAsync(TestApp.Checkout());
         var order = await c.Get<ICustomerOrderService>().GetMyOrderAsync(placed.Code);
 
         Assert.NotNull(order);
@@ -153,7 +153,7 @@ public class CheckoutTests
         Assert.Equal(9_000, order.PlatformFee);
         Assert.Equal(81_000, order.StoreReceivable);
         Assert.Equal(12_000, order.DriverEarning);
-        Assert.True((await c.Get<ICartService>().GetAsync()).IsEmpty);
+        Assert.Empty(await c.Get<ICartService>().GetAllAsync());
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class CheckoutTests
         using (var c = app.As(customer))
         {
             await c.Get<ICartService>().AddAsync(pa, 1);
-            placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+            placed = await c.PlaceOrderAsync(TestApp.Checkout());
         }
         using (var s = app.As(owner))
         {
@@ -198,7 +198,7 @@ public class CheckoutTests
         using (var c = app.As(c1))
         {
             await c.Get<ICartService>().AddAsync(pa, 2);
-            first = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout());
+            first = await c.PlaceOrderAsync(TestApp.Checkout());
         }
         await using (var db = app.Db()) Assert.Equal(1, (await db.Products.FindAsync(pa))!.Stock);
 
@@ -230,7 +230,7 @@ public class CheckoutTests
         await c.Get<ICartService>().AddAsync(pb, 4);
         using (var s = app.As(owner)) await s.Get<ISellerService>().SetStockAsync(storeId, pb, 2);
 
-        await Assert.ThrowsAsync<DomainException>(() => c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout()));
+        await Assert.ThrowsAsync<DomainException>(() => c.PlaceOrderAsync(TestApp.Checkout()));
         await using var db = app.Db();
         Assert.Equal(0, await db.Orders.CountAsync());
         Assert.Equal(5, (await db.Products.FindAsync(pa))!.Stock); // first reservation rolled back
@@ -240,13 +240,17 @@ public class CheckoutTests
     public async Task Same_idempotency_key_never_creates_two_orders()
     {
         await using var app = await TestApp.CreateAsync();
-        var (_, _, pa, _) = await app.CreateStoreAsync();
+        var (_, storeId, pa, _) = await app.CreateStoreAsync();
         var customer = await app.CreateUserAsync("C", Roles.Customer);
         using var c = app.As(customer);
         await c.Get<ICartService>().AddAsync(pa, 1);
         var key = Guid.NewGuid();
-        var first = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout(key));
-        var second = await c.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout(key));
+        var input = TestApp.Checkout(key);
+        input.StoreId = storeId; // the checkout page always sends its store id, also on a retry
+        var first = await c.PlaceOrderAsync(input);
+        var retry = TestApp.Checkout(key);
+        retry.StoreId = storeId;
+        var second = await c.PlaceOrderAsync(retry);
         Assert.Equal(first.OrderId, second.OrderId);
         Assert.True(second.WasDuplicate);
         await using var db = app.Db();
@@ -353,7 +357,7 @@ public class UnauthorizedAccessTests
         using (var anon = app.Anonymous())
         {
             await Assert.ThrowsAsync<ForbiddenException>(() => anon.Get<ICartService>().AddAsync(pa));
-            await Assert.ThrowsAsync<ForbiddenException>(() => anon.Get<ICustomerOrderService>().PlaceOrderAsync(TestApp.Checkout()));
+            await Assert.ThrowsAsync<ForbiddenException>(() => anon.PlaceOrderAsync(TestApp.Checkout()));
             await Assert.ThrowsAsync<ForbiddenException>(() => anon.Get<IAdminService>().GetDashboardAsync());
         }
         using (var d = app.As(driver))

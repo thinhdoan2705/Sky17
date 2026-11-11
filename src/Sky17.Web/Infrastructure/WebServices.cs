@@ -130,6 +130,25 @@ public sealed class CartState
 {
     public int Count { get; private set; }
     public event Action? Changed;
-    public void Set(CartDto cart) { Count = cart.Count; Changed?.Invoke(); }
+    /// <summary>Total items across all store carts.</summary>
     public void Set(int count) { Count = count; Changed?.Invoke(); }
+}
+
+/// <summary>Point used to measure store distances in search (per circuit): a saved address or the device location.</summary>
+public sealed class CustomerLocation
+{
+    public string? Label { get; private set; }
+    public double? Latitude { get; private set; }
+    public double? Longitude { get; private set; }
+    /// <summary>Saved address id, 0 = device location, null = not chosen yet.</summary>
+    public int? AddressId { get; private set; }
+    public bool HasPoint => Latitude is not null && Longitude is not null;
+
+    public void Set(int? addressId, string label, double? lat, double? lng)
+    {
+        AddressId = addressId;
+        Label = label;
+        Latitude = lat;
+        Longitude = lng;
+    }
 }

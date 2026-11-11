@@ -6,7 +6,7 @@
         </div>
         <h3>@Product.Name</h3>
     </a>
-    <div class="muted small">@Product.StoreName@(Product.CategoryName is null ? "" : " · " + Product.CategoryName)</div>
+    <div class="muted small">@(HideStore ? Product.CategoryName : Product.StoreName + (Product.CategoryName is null ? "" : " · " + Product.CategoryName))</div>
     <div class="product-foot">
         <span class="product-price">@Fmt.Vnd(Product.Price)</span>
         @if (!Product.IsAvailable)
@@ -24,4 +24,6 @@
     [Parameter, EditorRequired] public ProductCardDto Product { get; set; } = default!;
     [Parameter] public EventCallback<ProductCardDto> OnAdd { get; set; }
     [Parameter] public bool Disabled { get; set; }
+    /// <summary>Hide the store name (e.g. inside a store group in search results).</summary>
+    [Parameter] public bool HideStore { get; set; }
 }
