@@ -1,0 +1,53 @@
+@page "/search"
+@inherits PortalPage
+@inject ICatalogService Catalog
+
+<PageHeader Title="Tìm kiếm" Subtitle="@(string.IsNullOrWhiteSpace(Q) ? "Nhập từ khóa để tìm món ăn và cửa hàng" : $"Kết quả cho “{Q}”")" />
+
+<form class="flex mb-2" @onsubmit="Go">
+    <input class="search grow" placeholder="⌕ Tên món, cửa hàng..." @bind="term" aria-label="Từ khóa" />
+    <button class="btn" type="submit">Tìm</button>
+</form>
+
+@if (Loading) { <Skeleton Lines="5" /> }
+else
+{
+    @if (stores.Count > 0)
+    {
+        <section class="customer-section">
+            <div class="section-title"><h2>Cửa hàng</h2><span class="muted small">@stores.Count kết quả</span></div>
+            <div class="store-grid">@foreach (var s in stores) { <StoreCard Store="s" /> }</div>
+        </section>
+    }
+    <section class="customer-section">
+        <div class="section-title"><h2>Món ăn</h2><span class="muted small">@products.Count kết quả</span></div>
+        @if (products.Count == 0)
+        {
+            <EmptyState Icon="🔍" Title="Không tìm thấy món phù hợp" Text="Thử từ khóa khác như “cà phê”, “phở”, “bánh mì”." />
+        }
+        else
+        {
+            <div class="product-list">@foreach (var p in products) { <ProductCard Product="p" OnAdd="Add" /> }</div>
+        }
+    </section>
+}
+<CartAdder @ref="adder" />
+
+@code {
+    [SupplyParameterFromQuery] public string? Q { get; set; }
+    private string term = "";
+    private CartAdder? adder;
+    private IReadOnlyList<StoreCardDto> stores = [];
+    private IReadOnlyList<ProductCardDto> products = [];
+
+    protected override async Task LoadAsync()
+    {
+        term = Q ?? "";
+        stores = string.IsNullOrWhiteSpace(Q) ? [] : await Catalog.GetStoresAsync(Q, 12);
+        products = await Catalog.SearchProductsAsync(new ProductQuery(Search: Q, Take: 60));
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+    private void Go() => Nav.NavigateTo("/search?q=" + Uri.EscapeDataString(term.Trim()));
+    private Task Add(ProductCardDto p) => adder!.AddAsync(p.Id);
+}

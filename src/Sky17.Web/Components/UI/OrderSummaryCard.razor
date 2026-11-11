@@ -1,0 +1,35 @@
+@* Items + money breakdown of an order (prices are the persisted snapshot). *@
+<section class="card">
+    <div class="section-title"><h2>Món đã đặt</h2><span class="tag">@Order.Items.Sum(i => i.Quantity) món</span></div>
+    @foreach (var i in Order.Items)
+    {
+        <div class="row-item">
+            <div class="avatar">@i.Emoji</div>
+            <div class="grow"><strong>@i.Name</strong><span class="muted small">@Fmt.Vnd(i.UnitPrice) × @i.Quantity</span></div>
+            <b>@Fmt.Vnd(i.LineTotal)</b>
+        </div>
+    }
+    <div class="mt-2">
+        <div class="order-line"><span class="muted">Tạm tính</span><strong>@Fmt.Vnd(Order.ProductTotal)</strong></div>
+        <div class="order-line"><span class="muted">Phí giao hàng (@Fmt.Distance(Order.DistanceMeters))</span><strong>@Fmt.Vnd(Order.DeliveryFee)</strong></div>
+        @if (Order.DiscountAmount > 0) { <div class="order-line"><span class="muted">Giảm giá</span><strong>-@Fmt.Vnd(Order.DiscountAmount)</strong></div> }
+        <div class="order-line total"><span>Tổng cộng (COD)</span><span class="primary-text">@Fmt.Vnd(Order.GrandTotal)</span></div>
+        <div class="order-line"><span class="muted">Thanh toán</span><span>💵 Tiền mặt khi nhận hàng · @Order.PaymentStatus.Text()</span></div>
+        @if (ShowFinance)
+        {
+            <div class="order-line"><span class="muted">Phí nền tảng</span><span>@Fmt.Vnd(Order.PlatformFee)</span></div>
+            <div class="order-line"><span class="muted">Cửa hàng nhận</span><span>@Fmt.Vnd(Order.StoreReceivable) · @Order.StoreSettlementState.Text()</span></div>
+            @if (ShowDriverFinance)
+            {
+                <div class="order-line"><span class="muted">Tài xế nhận</span><span>@Fmt.Vnd(Order.DriverEarning) · @Order.DriverSettlementState.Text()</span></div>
+                <div class="order-line"><span class="muted">COD đã thu</span><span>@Fmt.Vnd(Order.CollectedCodAmount)</span></div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public OrderDetailDto Order { get; set; } = default!;
+    [Parameter] public bool ShowFinance { get; set; }
+    [Parameter] public bool ShowDriverFinance { get; set; }
+}

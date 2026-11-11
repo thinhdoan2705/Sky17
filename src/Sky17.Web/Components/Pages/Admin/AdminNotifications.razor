@@ -1,0 +1,40 @@
+@page "/admin/notifications"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Lịch sử thông báo" Subtitle="Thông báo đã gửi tới người dùng (lưu trong cơ sở dữ liệu)" />
+
+<div class="card">
+    @if (Loading) { <Skeleton Lines="8" /> }
+    else if (page is null || page.TotalCount == 0) { <EmptyState Icon="🔔" Title="Chưa có thông báo" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Thời gian</th><th>Người nhận</th><th>Loại</th><th>Tiêu đề</th><th>Nội dung</th><th>Đã đọc</th></tr></thead>
+                <tbody>
+                    @foreach (var n in page.Items)
+                    {
+                        <tr>
+                            <td data-label="Thời gian">@Fmt.Time(n.CreatedAtUtc)</td>
+                            <td data-label="Người nhận">@n.UserName</td>
+                            <td data-label="Loại"><span class="tag">@n.Type</span></td>
+                            <td data-label="Tiêu đề">@n.Title</td>
+                            <td data-label="Nội dung" style="white-space:normal;max-width:360px">@n.Message</td>
+                            <td data-label="Đã đọc">@(n.IsRead ? "✓" : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+    }
+</div>
+
+@code {
+    private int pageNo = 1;
+    private PagedResult<AdminNotificationDto>? page;
+
+    protected override async Task LoadAsync() => page = await Admin.GetNotificationHistoryAsync(pageNo);
+    private async Task Go(int p) { pageNo = p; await ReloadAsync(); }
+}

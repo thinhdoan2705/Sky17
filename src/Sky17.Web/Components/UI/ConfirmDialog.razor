@@ -1,0 +1,54 @@
+@* Confirmation dialog with optional mandatory reason. Usage: set Open=true; OnConfirm receives the reason. *@
+<Modal Open="Open" OpenChanged="SetOpen" Title="@Title">
+    <p>@Message</p>
+    @if (AskReason)
+    {
+        <div class="field">
+            <label for="confirm-reason">@ReasonLabel</label>
+            <textarea id="confirm-reason" rows="3" @bind="reason" @bind:event="oninput" placeholder="Nhập lý do..."></textarea>
+        </div>
+        @if (Presets.Count > 0)
+        {
+            <div class="flex flex-wrap mb-2">
+                @foreach (var p in Presets)
+                {
+                    <button type="button" class="btn btn-soft btn-sm" @onclick="() => reason = p">@p</button>
+                }
+            </div>
+        }
+    }
+    @if (ExtraContent is not null) { @ExtraContent }
+    <div class="form-actions">
+        <button class="btn btn-outline" @onclick="() => SetOpen(false)">Đóng</button>
+        <button class="btn @(Danger ? "btn-danger" : "")" disabled="@(Busy || (AskReason && string.IsNullOrWhiteSpace(reason)))" @onclick="ConfirmAsync">
+            @if (Busy) { <span class="spinner"></span> }
+            @ConfirmText
+        </button>
+    </div>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "Xác nhận";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Xác nhận";
+    [Parameter] public bool Danger { get; set; }
+    [Parameter] public bool AskReason { get; set; }
+    [Parameter] public string ReasonLabel { get; set; } = "Lý do";
+    [Parameter] public IReadOnlyList<string> Presets { get; set; } = [];
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public RenderFragment? ExtraContent { get; set; }
+    [Parameter] public EventCallback<string> OnConfirm { get; set; }
+
+    private string reason = "";
+
+    protected override void OnParametersSet()
+    {
+        if (!Open) reason = "";
+    }
+
+    private Task SetOpen(bool value) => OpenChanged.InvokeAsync(value);
+
+    private async Task ConfirmAsync() => await OnConfirm.InvokeAsync(reason.Trim());
+}

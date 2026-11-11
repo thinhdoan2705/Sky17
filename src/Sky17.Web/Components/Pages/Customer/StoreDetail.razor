@@ -1,0 +1,55 @@
+@page "/stores/{Id:int}"
+@inherits PortalPage
+@inject ICatalogService Catalog
+
+@if (Loading) { <Skeleton Cards="1" Lines="4" /> }
+else if (store is null)
+{
+    <PageTitle>Không tìm thấy | Sky 17</PageTitle>
+    <EmptyState Icon="🏪" Title="Cửa hàng không tồn tại hoặc chưa hoạt động"><a class="btn" href="/stores">Xem cửa hàng khác</a></EmptyState>
+}
+else
+{
+    <PageTitle>@store.Store.Name | Sky 17</PageTitle>
+    <div class="store-banner">
+        <div class="store-art">@store.Store.Emoji</div>
+        <div class="grow">
+            <h1 style="margin:0 0 6px;color:#fff">@store.Store.Name</h1>
+            <p>@(store.Store.Tagline ?? "") · @store.Store.ProductCount món</p>
+            <p class="small">📍 @store.Store.Address</p>
+            <p class="small">🕘 @(store.Store.OpenTime == store.Store.CloseTime ? "Mở cửa 24/7" : $"{store.Store.OpenTime:HH\\:mm} – {store.Store.CloseTime:HH\\:mm}") ·
+                @(store.Store.IsOpenNow ? "Đang nhận đơn" : "Hiện không nhận đơn")</p>
+        </div>
+    </div>
+    @if (!store.Store.IsOpenNow)
+    {
+        <div class="alert alert-warning">Cửa hàng đang đóng cửa hoặc tạm nghỉ, bạn có thể xem thực đơn nhưng chưa thể đặt đơn.</div>
+    }
+    @if (!string.IsNullOrEmpty(store.Description)) { <p class="muted">@store.Description</p> }
+
+    <div class="tabs">
+        <button class="@(category is null ? "active" : "")" @onclick="() => category = null">Tất cả</button>
+        @foreach (var c in store.Categories)
+        {
+            <button class="@(category == c.Name ? "active" : "")" @onclick="() => category = c.Name">@c.Name (@c.ProductCount)</button>
+        }
+    </div>
+    var list = store.Products.Where(p => category is null || p.CategoryName == category).ToList();
+    @if (list.Count == 0) { <EmptyState Icon="🍽️" Title="Chưa có món" /> }
+    else
+    {
+        <div class="product-list">@foreach (var p in list) { <ProductCard Product="p" OnAdd="Add" Disabled="!store.Store.IsOpenNow" /> }</div>
+    }
+}
+<CartAdder @ref="adder" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private StoreDetailDto? store;
+    private string? category;
+    private CartAdder? adder;
+
+    protected override async Task LoadAsync() => store = await Catalog.GetStoreAsync(Id);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+    private Task Add(ProductCardDto p) => adder!.AddAsync(p.Id);
+}

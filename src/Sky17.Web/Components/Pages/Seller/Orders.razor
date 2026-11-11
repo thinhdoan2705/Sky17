@@ -1,0 +1,86 @@
+@page "/seller/orders"
+
+<PageHeader Title="Đơn hàng" Subtitle="Xác nhận, chuẩn bị và theo dõi các đơn của cửa hàng" />
+
+<StoreGate>
+    <div class="tabs">
+        @foreach (var t in tabs)
+        {
+            <button class="@(tab == t.Key ? "active" : "")" @onclick="() => SetTab(t.Key)">@t.Label</button>
+        }
+    </div>
+    <div class="card">
+        <div class="table-toolbar">
+            <input class="search" placeholder="⌕ Tìm mã đơn, khách hàng, SĐT..." @bind="search" @bind:event="oninput" @bind:after="Search" aria-label="Tìm đơn" />
+            <span class="muted small">Tự động cập nhật khi có đơn mới</span>
+        </div>
+        @if (Loading) { <Skeleton Lines="5" /> }
+        else if (page is null || page.TotalCount == 0) { <EmptyState Icon="📭" Title="Không có đơn hàng" /> }
+        else
+        {
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Món</th><th>Tổng tiền</th><th>Trạng thái</th><th>Thời gian</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var o in page.Items)
+                        {
+                            <tr>
+                                <td data-label="Mã đơn"><strong>@o.Code</strong></td>
+                                <td data-label="Khách hàng">@o.CustomerName<span class="muted small">@o.RecipientPhone</span></td>
+                                <td data-label="Món">@o.ItemCount</td>
+                                <td data-label="Tổng tiền">@Fmt.Vnd(o.GrandTotal)</td>
+                                <td data-label="Trạng thái"><OrderStatusBadge Status="o.Status" /></td>
+                                <td data-label="Thời gian">@Fmt.Time(o.PlacedAtUtc)</td>
+                                <td class="actions">
+                                    <div class="table-actions">
+                                        @if (Next(o.Status) is { } next)
+                                        {
+                                            <button class="btn btn-sm" disabled="@Busy" @onclick="() => Advance(o.Id, next)">@next.ActionText()</button>
+                                        }
+                                        <a class="btn btn-soft btn-sm" href="/seller/orders/@o.Id">Chi tiết</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="GoPage" />
+        }
+    </div>
+</StoreGate>
+
+@code {
+    private static readonly (string Key, string Label)[] tabs =
+    [
+        ("active", "Đang xử lý"), ("Pending", "Chờ xác nhận"), ("Confirmed", "Đã xác nhận"), ("Preparing", "Đang chuẩn bị"),
+        ("ReadyForPickup", "Chờ tài xế"), ("done", "Đã kết thúc"), ("all", "Tất cả"),
+    ];
+    private string tab = "active";
+    private string search = "";
+    private int pageNo = 1;
+    private PagedResult<OrderSummaryDto>? page;
+
+    protected override async Task LoadStoreAsync()
+    {
+        var f = new OrderFilter { Search = search, Page = pageNo };
+        if (tab is "active" or "done") f.Bucket = tab;
+        else if (Enum.TryParse<OrderStatus>(tab, out var st)) f.Status = st;
+        page = await Seller.GetOrdersAsync(StoreId, f);
+    }
+
+    private async Task SetTab(string key) { tab = key; pageNo = 1; await ReloadAsync(); }
+    private async Task Search() { pageNo = 1; await ReloadAsync(); }
+    private async Task GoPage(int p) { pageNo = p; await ReloadAsync(); }
+
+    private static OrderStatus? Next(OrderStatus s) => s switch
+    {
+        OrderStatus.Pending => OrderStatus.Confirmed,
+        OrderStatus.Confirmed => OrderStatus.Preparing,
+        OrderStatus.Preparing => OrderStatus.ReadyForPickup,
+        _ => null,
+    };
+
+    private Task Advance(int orderId, OrderStatus target) =>
+        RunAsync(() => Seller.ChangeOrderStatusAsync(StoreId, orderId, target, null), $"Đã cập nhật: {target.Text()}");
+}

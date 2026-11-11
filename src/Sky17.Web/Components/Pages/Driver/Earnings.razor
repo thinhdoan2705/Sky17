@@ -1,0 +1,50 @@
+@page "/driver/earnings"
+@inherits PortalPage
+@inject IDriverService Drivers
+
+<PageHeader Title="Thu nhập & ví COD" Subtitle="Thu nhập từ phí giao hàng và tiền mặt thu hộ" />
+
+@if (Loading || e is null) { <Skeleton Cards="4" Lines="5" /> }
+else
+{
+    <div class="kpis">
+        <KpiCard Icon="◉" Variant="green" Label="Tổng thu nhập" Value="@Fmt.Vnd(e.TotalEarnings)" Note="@($"{e.CompletedTrips} chuyến thành công")" />
+        <KpiCard Icon="💵" Label="Tiền mặt đang giữ" Value="@Fmt.Vnd(e.CodHolding)" Note="Chưa đối soát" />
+        <KpiCard Icon="↗" Variant="orange" Label="Cần nộp về Sky 17" Value="@Fmt.Vnd(e.OwedToPlatform)" Note="COD trừ thu nhập của bạn" />
+        <KpiCard Icon="✓" Variant="purple" Label="Thu nhập chưa đối soát" Value="@Fmt.Vnd(e.UnsettledEarnings)" />
+    </div>
+    <section class="card mb-2">
+        <div class="section-title"><h2>Thu nhập 7 ngày</h2></div>
+        <BarChart Points="e.Last7Days" ShowAmount="true" AriaLabel="Thu nhập 7 ngày" />
+    </section>
+    <div class="grid-half">
+        <section class="card">
+            <h2>Lịch sử thu hộ COD</h2>
+            @if (e.CodRecords.Count == 0) { <EmptyState Icon="💵" Title="Chưa có giao dịch" /> }
+            @foreach (var c in e.CodRecords)
+            {
+                <div class="row-item">
+                    <div class="avatar">@(c.Type == CodTransactionType.CollectedFromCustomer ? "↓" : "↑")</div>
+                    <div class="grow"><strong>@c.Type.Text() · @c.OrderCode</strong><span class="small muted">@Fmt.Time(c.CreatedAtUtc)</span></div>
+                    <b class="@(c.Type == CodTransactionType.CollectedFromCustomer ? "" : "success-text")">@Fmt.Vnd(c.Amount)</b>
+                </div>
+            }
+        </section>
+        <section class="card">
+            <h2>Phiếu đối soát</h2>
+            @if (e.Settlements.Count == 0) { <EmptyState Icon="🧾" Title="Chưa có phiếu đối soát" Text="Quản trị viên sẽ lập phiếu khi bạn nộp tiền COD." /> }
+            @foreach (var s in e.Settlements)
+            {
+                <div class="row-item">
+                    <div class="grow"><strong>@s.Code</strong><span class="small muted">@s.OrderCount đơn · COD @Fmt.Vnd(s.GrossCod) · thu nhập @Fmt.Vnd(s.DriverEarnings)</span></div>
+                    <div class="text-right"><StatusBadge Text="@s.Status.Text()" Variant="@s.Status.Css()" /><div class="strong mt-1">@Fmt.Vnd(s.Amount)</div></div>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private DriverEarningsDto? e;
+    protected override async Task LoadAsync() => e = await Drivers.GetEarningsAsync();
+}

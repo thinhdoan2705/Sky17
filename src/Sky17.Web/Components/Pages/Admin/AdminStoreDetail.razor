@@ -1,0 +1,85 @@
+@page "/admin/stores/{Id:int}"
+@inherits PortalPage
+@inject IAdminService Admin
+
+@if (Loading) { <Skeleton Cards="1" Lines="6" /> }
+else if (d is null) { <EmptyState Icon="🏪" Title="Không tìm thấy cửa hàng"><a class="btn" href="/admin/stores">Về danh sách</a></EmptyState> }
+else
+{
+    <PageHeader Title="@($"{d.Store.Emoji} {d.Store.Name}")" Subtitle="@d.Store.Address">
+        <Actions><StatusBadge Text="@d.Store.Status.Text()" Variant="@d.Store.Status.Css()" /></Actions>
+    </PageHeader>
+    <div class="kpis">
+        <KpiCard Icon="▦" Label="Sản phẩm" Value="@d.Store.ProductCount.ToString()" />
+        <KpiCard Icon="✓" Variant="green" Label="Đơn đã giao" Value="@d.Store.DeliveredOrders.ToString()" />
+        <KpiCard Icon="◉" Variant="purple" Label="Doanh thu món" Value="@Fmt.Vnd(d.Store.Revenue)" />
+        <KpiCard Icon="⌛" Variant="orange" Label="Chưa thanh toán cho shop" Value="@Fmt.Vnd(d.PendingReceivable)" />
+    </div>
+    <div class="grid-2">
+        <div class="stack">
+            <section class="card">
+                <h2>Sản phẩm</h2>
+                <div class="table-scroll">
+                    <table class="responsive">
+                        <thead><tr><th>Sản phẩm</th><th>Giá</th><th>Kho</th><th>Đã bán</th><th>Trạng thái</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in d.Products)
+                            {
+                                <tr>
+                                    <td data-label="Sản phẩm">@p.Emoji @p.Name</td>
+                                    <td data-label="Giá">@Fmt.Vnd(p.Price)</td>
+                                    <td data-label="Kho">@p.Stock</td>
+                                    <td data-label="Đã bán">@p.SoldQuantity</td>
+                                    <td data-label="Trạng thái">@(p.IsActive ? (p.IsAvailable ? "Đang bán" : "Tạm ngưng") : "Đã ẩn")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="card">
+                <h2>Đơn gần đây</h2>
+                @foreach (var o in d.RecentOrders)
+                {
+                    <a class="row-item" href="/admin/orders/@o.Id">
+                        <div class="grow"><strong>@o.Code · @o.CustomerName</strong><span class="small muted">@Fmt.Time(o.PlacedAtUtc)</span></div>
+                        <OrderStatusBadge Status="o.Status" /><b>@Fmt.Vnd(o.GrandTotal)</b>
+                    </a>
+                }
+            </section>
+        </div>
+        <div class="stack">
+            <section class="card">
+                <h2>Thông tin</h2>
+                <div class="row-item"><span class="grow muted">Loại hình</span><span>@(d.Store.Tagline ?? "—")</span></div>
+                <div class="row-item"><span class="grow muted">Điện thoại</span><span>@d.Store.PhoneNumber</span></div>
+                <div class="row-item"><span class="grow muted">Giờ mở cửa</span><span>@(d.OpenTime == d.CloseTime ? "24/7" : $"{d.OpenTime:HH\\:mm} – {d.CloseTime:HH\\:mm}")</span></div>
+                <div class="row-item"><span class="grow muted">Nhận đơn</span><span>@(d.IsAcceptingOrders ? "Đang nhận" : "Tạm nghỉ")</span></div>
+                <div class="row-item"><span class="grow muted">Ngày đăng ký</span><span>@Fmt.Date(d.Store.CreatedAtUtc)</span></div>
+                @if (!string.IsNullOrEmpty(d.Description)) { <p class="muted mt-1">@d.Description</p> }
+                <StoreStatusActions Store="d.Store" OnChanged="ReloadAsync" />
+            </section>
+            <section class="card">
+                <h2>Người bán</h2>
+                @foreach (var m in d.Members)
+                {
+                    <div class="row-item">
+                        <div class="avatar">@Fmt.Initials(m.FullName)</div>
+                        <div class="grow"><strong>@m.FullName</strong><span class="small muted">@m.Email</span></div>
+                        <StatusBadge Text="@m.Role.Text()" />
+                    </div>
+                }
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private AdminStoreDetailDto? d;
+
+    protected override async Task LoadAsync()
+    {
+        try { d = await Admin.GetStoreAsync(Id); } catch (NotFoundException) { d = null; }
+    }
+}

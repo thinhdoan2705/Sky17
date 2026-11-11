@@ -1,0 +1,80 @@
+@page "/admin/settings"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Cài đặt hệ thống" Subtitle="Bảng giá giao hàng, hoa hồng, trạng thái dịch vụ và danh mục chung" />
+
+@if (Loading || s is null) { <Skeleton Lines="8" /> }
+else
+{
+    <div class="grid-2">
+        <section class="card">
+            <h2>Phí giao hàng & vận hành</h2>
+            <EditForm Model="s" OnValidSubmit="Save">
+                <DataAnnotationsValidator />
+                <div class="fields">
+                    <div class="field"><label>Phí giao cơ bản (VND)</label><InputNumber @bind-Value="s.BaseFee" step="1000" /><ValidationMessage For="() => s.BaseFee" /></div>
+                    <div class="field"><label>Quãng đường cơ bản (mét)</label><InputNumber @bind-Value="s.BaseDistanceMeters" step="100" /><ValidationMessage For="() => s.BaseDistanceMeters" /></div>
+                    <div class="field"><label>Phí mỗi km tiếp theo (VND)</label><InputNumber @bind-Value="s.FeePerKm" step="500" /><ValidationMessage For="() => s.FeePerKm" /></div>
+                    <div class="field"><label>Hoa hồng nền tảng (bps, 1000 = 10%)</label><InputNumber @bind-Value="s.PlatformFeeBps" step="50" /><span class="hint">= @Fmt.Percent(s.PlatformFeeBps) giá trị món</span><ValidationMessage For="() => s.PlatformFeeBps" /></div>
+                    <div class="field"><label>Tài xế nhận (bps phí giao)</label><InputNumber @bind-Value="s.DriverShareBps" step="100" /><span class="hint">= @Fmt.Percent(s.DriverShareBps) phí giao</span><ValidationMessage For="() => s.DriverShareBps" /></div>
+                    <div class="field"><label>Số đơn tối đa / tài xế</label><InputNumber @bind-Value="s.MaxActiveDeliveriesPerDriver" /><ValidationMessage For="() => s.MaxActiveDeliveriesPerDriver" /></div>
+                    <div class="field"><label>Tên thương hiệu</label><InputText @bind-Value="s.BrandName" /><ValidationMessage For="() => s.BrandName" /></div>
+                    <div class="field"><label>Hotline hỗ trợ</label><InputText @bind-Value="s.SupportPhone" /></div>
+                    <div class="field"><label>Khu vực phục vụ</label><InputText @bind-Value="s.ServiceArea" /></div>
+                </div>
+                <label class="check"><InputCheckbox @bind-Value="s.ServiceAvailable" /> Dịch vụ đang hoạt động (bỏ chọn để tạm ngưng nhận đơn mới)</label>
+                <div class="alert alert-info small mt-1">
+                    Ví dụ: đơn 5 km → @Fmt.Vnd(Example(5000)); đơn chưa đo khoảng cách → @Fmt.Vnd(s.BaseFee). Thay đổi bảng giá chỉ áp dụng cho đơn mới; bảng giá cũ được lưu lịch sử.
+                </div>
+                <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu cài đặt</button></div>
+            </EditForm>
+        </section>
+        <section class="card">
+            <div class="section-title"><h2>Danh mục chung</h2><button class="btn btn-soft btn-sm" @onclick="() => editing = new CategoryInput { SortOrder = categories.Count + 1 }">+ Thêm</button></div>
+            @foreach (var c in categories)
+            {
+                <div class="row-item">
+                    <div class="avatar">@c.Emoji</div>
+                    <div class="grow"><strong>@c.Name</strong><span class="small muted">@c.ProductCount sản phẩm · thứ tự @c.SortOrder · @(c.IsActive ? "Hiển thị" : "Ẩn")</span></div>
+                    <button class="btn btn-soft btn-sm" @onclick="() => editing = new CategoryInput { Id = c.Id, Name = c.Name, Emoji = c.Emoji, SortOrder = c.SortOrder, IsActive = c.IsActive }">Sửa</button>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="Danh mục chung">
+    @if (editing is not null)
+    {
+        <EditForm Model="editing" OnValidSubmit="SaveCategory">
+            <DataAnnotationsValidator />
+            <div class="fields">
+                <div class="field"><label>Tên</label><InputText @bind-Value="editing.Name" /><ValidationMessage For="() => editing.Name" /></div>
+                <div class="field"><label>Emoji</label><InputText @bind-Value="editing.Emoji" /></div>
+                <div class="field"><label>Thứ tự</label><InputNumber @bind-Value="editing.SortOrder" /></div>
+            </div>
+            <label class="check"><InputCheckbox @bind-Value="editing.IsActive" /> Hiển thị cho khách hàng</label>
+            <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu</button></div>
+        </EditForm>
+    }
+</Modal>
+
+@code {
+    private DeliverySettingsInput? s;
+    private IReadOnlyList<CategoryDto> categories = [];
+    private CategoryInput? editing;
+
+    protected override async Task LoadAsync()
+    {
+        s = await Admin.GetSettingsAsync();
+        categories = await Admin.GetPlatformCategoriesAsync();
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private long Example(int meters) => DeliveryPricing.CalculateFee(new DeliveryRateRule { BaseFee = s!.BaseFee, BaseDistanceMeters = s.BaseDistanceMeters, FeePerKm = s.FeePerKm }, meters);
+
+    private Task Save() => RunAsync(() => Admin.SaveSettingsAsync(s!), "Đã lưu cài đặt");
+    private Task SaveCategory() => RunAsync(async () => { await Admin.SavePlatformCategoryAsync(editing!); editing = null; }, "Đã lưu danh mục");
+}

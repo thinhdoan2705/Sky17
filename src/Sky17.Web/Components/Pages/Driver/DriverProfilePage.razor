@@ -1,0 +1,62 @@
+@page "/driver/profile"
+@inherits PortalPage
+@inject IDriverService Drivers
+@inject IProfileService Profiles
+
+<PageHeader Title="Hồ sơ tài xế" Subtitle="Thông tin cá nhân và phương tiện" />
+
+@if (Loading || p is null) { <Skeleton Lines="6" /> }
+else
+{
+    <div class="grid-half">
+        <section class="card">
+            <div class="section-title"><h2>Thông tin cá nhân</h2><StatusBadge Text="@p.Status.Text()" Variant="@p.Status.Css()" /></div>
+            <EditForm Model="person" OnValidSubmit="SavePerson">
+                <DataAnnotationsValidator />
+                <div class="field"><label>Email</label><input value="@p.Email" disabled /></div>
+                <div class="field"><label>Họ và tên</label><InputText @bind-Value="person.FullName" /><ValidationMessage For="() => person.FullName" /></div>
+                <div class="field"><label>Số điện thoại</label><InputText type="tel" @bind-Value="person.PhoneNumber" /><ValidationMessage For="() => person.PhoneNumber" /></div>
+                <button class="btn" type="submit" disabled="@Busy">Lưu</button>
+            </EditForm>
+        </section>
+        <section class="card">
+            <h2>Phương tiện</h2>
+            <EditForm Model="vehicle" OnValidSubmit="SaveVehicle">
+                <DataAnnotationsValidator />
+                <div class="fields">
+                    <div class="field"><label>Loại xe</label><InputText @bind-Value="vehicle.VehicleType" /><ValidationMessage For="() => vehicle.VehicleType" /></div>
+                    <div class="field"><label>Biển số</label><InputText @bind-Value="vehicle.LicensePlate" /><ValidationMessage For="() => vehicle.LicensePlate" /></div>
+                    <div class="field"><label>Số CCCD</label><InputText @bind-Value="vehicle.IdentityNumber" /></div>
+                    <div class="field"><label>Khu vực hoạt động</label><InputText @bind-Value="vehicle.ServiceArea" /></div>
+                </div>
+                <button class="btn" type="submit" disabled="@Busy">Lưu phương tiện</button>
+            </EditForm>
+            <div class="mt-2">
+                <a class="row-item" href="/notifications"><span class="grow">🔔 Thông báo</span>›</a>
+                <a class="row-item" href="/Account/Manage/ChangePassword" data-enhance-nav="false"><span class="grow">🔑 Đổi mật khẩu</span>›</a>
+                <form action="/Account/Logout" method="post" data-enhance="false" class="mt-1">
+                    <AntiforgeryToken /><input type="hidden" name="returnUrl" value="/" />
+                    <button type="submit" class="btn btn-outline btn-block danger-text">Đăng xuất</button>
+                </form>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private DriverProfileDto? p;
+    private ProfileInput person = new();
+    private DriverProfileInput vehicle = new();
+
+    protected override async Task LoadAsync()
+    {
+        p = await Drivers.GetProfileAsync();
+        person = new ProfileInput { FullName = p.FullName, PhoneNumber = p.PhoneNumber };
+        vehicle = new DriverProfileInput { VehicleType = p.VehicleType, LicensePlate = p.LicensePlate, IdentityNumber = p.IdentityNumber, ServiceArea = p.ServiceArea };
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private Task SavePerson() => RunAsync(() => Profiles.UpdateMineAsync(person), "Đã lưu thông tin");
+    private Task SaveVehicle() => RunAsync(() => Drivers.UpdateProfileAsync(vehicle), "Đã lưu phương tiện");
+}

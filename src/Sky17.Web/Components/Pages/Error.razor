@@ -1,0 +1,19 @@
+﻿@page "/Error"
+@layout AuthLayout
+@using System.Diagnostics
+
+<PageTitle>Lỗi | Sky 17</PageTitle>
+
+<div class="text-center">
+    <div style="font-size:46px">⚠️</div>
+    <h1>Đã có lỗi xảy ra</h1>
+    <p class="muted">Hệ thống gặp sự cố khi xử lý yêu cầu. Vui lòng thử lại sau.</p>
+    @if (!string.IsNullOrEmpty(RequestId)) { <p class="small muted">Mã yêu cầu: <code>@RequestId</code></p> }
+    <a class="btn" href="/">Về trang chủ</a>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId { get; set; }
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

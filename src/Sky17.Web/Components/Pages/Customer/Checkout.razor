@@ -1,0 +1,138 @@
+@page "/checkout"
+@attribute [Authorize(Roles = Roles.Customer)]
+@inherits PortalPage
+@inject ICartService CartService
+@inject ICustomerOrderService Orders
+@inject IAddressService Addresses
+@inject IProfileService Profiles
+@inject CartState CartBadge
+
+<PageHeader Title="Thanh toán" Subtitle="Kiểm tra thông tin và xác nhận đơn hàng" />
+
+@if (Loading) { <Skeleton Lines="6" /> }
+else if (cart is null || cart.IsEmpty)
+{
+    <div class="card"><EmptyState Icon="🛒" Title="Giỏ hàng đang trống"><a class="btn" href="/">Chọn món</a></EmptyState></div>
+}
+else
+{
+    <EditForm Model="input" OnValidSubmit="PlaceAsync">
+        <DataAnnotationsValidator />
+        <div class="checkout-grid">
+            <section class="card">
+                <h2>📍 Thông tin nhận hàng</h2>
+                @if (addresses.Count > 0)
+                {
+                    <div class="stack mb-2">
+                        @foreach (var a in addresses)
+                        {
+                            <label class="row-item" style="cursor:pointer">
+                                <input type="radio" name="addr" checked="@(selectedAddress == a.Id)" @onchange="() => UseAddress(a)" />
+                                <div class="grow"><strong>@a.Label · @a.RecipientName · @a.PhoneNumber</strong><span class="small muted">@a.FullText</span></div>
+                            </label>
+                        }
+                        <label class="row-item" style="cursor:pointer">
+                            <input type="radio" name="addr" checked="@(selectedAddress == 0)" @onchange="UseNew" />
+                            <div class="grow"><strong>Nhập địa chỉ khác</strong></div>
+                        </label>
+                    </div>
+                }
+                <div class="fields">
+                    <div class="field">
+                        <label for="rn">Người nhận</label>
+                        <InputText id="rn" @bind-Value="input.RecipientName" placeholder="Họ và tên" />
+                        <ValidationMessage For="() => input.RecipientName" />
+                    </div>
+                    <div class="field">
+                        <label for="rp">Số điện thoại</label>
+                        <InputText id="rp" type="tel" @bind-Value="input.RecipientPhone" placeholder="09xxxxxxxx" />
+                        <ValidationMessage For="() => input.RecipientPhone" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="ra">Địa chỉ nhận hàng</label>
+                    <InputTextArea id="ra" rows="2" @bind-Value="input.DeliveryAddress" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh" />
+                    <ValidationMessage For="() => input.DeliveryAddress" />
+                </div>
+                <div class="field">
+                    <label for="rnote">Ghi chú cho tài xế / cửa hàng</label>
+                    <InputTextArea id="rnote" rows="2" @bind-Value="input.DeliveryNote" placeholder="Ví dụ: gọi trước khi đến, ít đá..." />
+                </div>
+                @if (selectedAddress == 0)
+                {
+                    <label class="check"><InputCheckbox @bind-Value="input.SaveAddress" /> Lưu địa chỉ này vào sổ địa chỉ</label>
+                }
+                <div class="row-item mt-1"><span class="grow">💵 Thanh toán khi nhận hàng (COD)</span><span class="status green">Áp dụng</span></div>
+            </section>
+            <aside class="card">
+                <h2>🧾 @cart.StoreName</h2>
+                @foreach (var l in cart.Lines)
+                {
+                    <div class="order-line"><span>@l.Quantity × @l.Name</span><span>@Fmt.Vnd(l.LineTotal)</span></div>
+                }
+                @foreach (var w in cart.Warnings) { <div class="alert alert-warning small">@w</div> }
+                <div class="order-line mt-2"><span class="muted">Tạm tính</span><strong>@Fmt.Vnd(cart.Subtotal)</strong></div>
+                <div class="order-line"><span class="muted">Phí giao hàng</span><strong>@Fmt.Vnd(cart.DeliveryFee)</strong></div>
+                <div class="order-line total"><span>Tổng thanh toán</span><span class="primary-text">@Fmt.Vnd(cart.Total)</span></div>
+                <div class="sticky-action">
+                    <button type="submit" class="btn btn-block" disabled="@(Busy || !cart.CanCheckout)">
+                        @if (Busy) { <span class="spinner"></span> }
+                        Đặt hàng ngay ⚡
+                    </button>
+                </div>
+                <p class="small muted mt-1">Giá được lấy từ hệ thống tại thời điểm đặt và lưu cố định trong đơn.</p>
+            </aside>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private CartDto? cart;
+    private IReadOnlyList<AddressDto> addresses = [];
+    private int selectedAddress;
+    // One idempotency key per checkout page visit: double-clicks or retries never create two orders.
+    private readonly CheckoutInput input = new() { IdempotencyKey = Guid.NewGuid() };
+    private bool initialized;
+
+    protected override async Task LoadAsync()
+    {
+        cart = await CartService.GetAsync();
+        addresses = await Addresses.GetMineAsync();
+        if (initialized) return;
+        initialized = true;
+        if ((addresses.FirstOrDefault(x => x.IsDefault) ?? addresses.FirstOrDefault()) is { } a) UseAddress(a);
+        else
+        {
+            var me = await Profiles.GetMineAsync();
+            input.RecipientName = me.FullName;
+            input.RecipientPhone = me.PhoneNumber ?? "";
+            input.SaveAddress = true;
+        }
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+
+    private void UseAddress(AddressDto a)
+    {
+        selectedAddress = a.Id;
+        input.RecipientName = a.RecipientName;
+        input.RecipientPhone = a.PhoneNumber;
+        input.DeliveryAddress = a.FullText;
+        if (string.IsNullOrEmpty(input.DeliveryNote)) input.DeliveryNote = a.Note;
+        input.SaveAddress = false;
+    }
+
+    private void UseNew()
+    {
+        selectedAddress = 0;
+        input.DeliveryAddress = "";
+        input.SaveAddress = true;
+    }
+
+    private Task PlaceAsync() => RunAsync(async () =>
+    {
+        var result = await Orders.PlaceOrderAsync(input);
+        CartBadge.Set(0);
+        Nav.NavigateTo($"/orders/{result.Code}?placed=1");
+    }, reload: false);
+}

@@ -1,0 +1,57 @@
+@* Desktop sidebar + topbar, mobile bottom tabs. Shared by Admin and Seller portals. *@
+<div class="shell">
+    <aside class="sidebar">
+        <a href="@HomeHref" class="logo"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
+        @SidebarTop
+        <div>
+            <div class="menu-caption">ĐIỀU HƯỚNG</div>
+            <nav class="menu">
+                @foreach (var item in Items)
+                {
+                    <NavLink href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)" ActiveClass="active">
+                        <span>@item.Icon</span>@item.Text
+                        @if (item.Badge > 0) { <span class="badge-dot" style="position:static;margin-left:auto">@item.Badge</span> }
+                    </NavLink>
+                }
+            </nav>
+        </div>
+        <div class="side-foot">
+            <div class="avatar">@Fmt.Initials(FootTitle)</div>
+            <div class="grow"><b>@FootTitle</b><div class="muted small">@FootSubtitle</div></div>
+        </div>
+    </aside>
+    <main class="main">
+        <header class="topbar">
+            <a href="@HomeHref" class="mobile-head logo" style="padding:0"><span class="logo-mark">⚡</span><span>SKY <em>17</em></span></a>
+            <span class="breadcrumb">@Breadcrumb</span>
+            <div class="toolbar">
+                @TopbarExtra
+                <NotificationBell />
+                <UserMenu Name="@UserName" />
+            </div>
+        </header>
+        <div class="content">
+            @ChildContent
+        </div>
+    </main>
+</div>
+<nav class="mobile-tabs" aria-label="Điều hướng chính">
+    @foreach (var item in Items.Where(i => i.Mobile).Take(5))
+    {
+        <NavLink href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)" ActiveClass="active"><span>@item.Icon</span>@(item.ShortText ?? item.Text)</NavLink>
+    }
+</nav>
+
+@code {
+    public sealed record NavItem(string Href, string Icon, string Text, bool Exact = false, bool Mobile = false, string? ShortText = null, int Badge = 0);
+
+    [Parameter, EditorRequired] public IReadOnlyList<NavItem> Items { get; set; } = [];
+    [Parameter] public string HomeHref { get; set; } = "/";
+    [Parameter] public string Breadcrumb { get; set; } = "";
+    [Parameter] public string FootTitle { get; set; } = "";
+    [Parameter] public string FootSubtitle { get; set; } = "";
+    [Parameter] public string? UserName { get; set; }
+    [Parameter] public RenderFragment? SidebarTop { get; set; }
+    [Parameter] public RenderFragment? TopbarExtra { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

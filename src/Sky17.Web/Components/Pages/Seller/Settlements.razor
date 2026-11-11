@@ -1,0 +1,45 @@
+@page "/seller/settlements"
+
+<PageHeader Title="Lịch sử đối soát" Subtitle="Các khoản Sky 17 thanh toán cho cửa hàng" />
+
+<StoreGate>
+    @if (!IsOwner)
+    {
+        <div class="alert alert-warning">Chỉ chủ cửa hàng mới xem được thông tin đối soát.</div>
+    }
+    else if (Loading) { <Skeleton Lines="5" /> }
+    else if (list.Count == 0) { <div class="card"><EmptyState Icon="💰" Title="Chưa có phiếu đối soát" Text="Quản trị viên sẽ lập phiếu thanh toán định kỳ cho các đơn đã giao." /></div> }
+    else
+    {
+        <div class="card">
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Mã phiếu</th><th>Số đơn</th><th>Doanh thu món</th><th>Cửa hàng nhận</th><th>Trạng thái</th><th>Ngày lập</th><th>Xác nhận</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in list)
+                        {
+                            <tr>
+                                <td data-label="Mã phiếu"><strong>@s.Code</strong></td>
+                                <td data-label="Số đơn">@s.OrderCount</td>
+                                <td data-label="Doanh thu món">@Fmt.Vnd(s.GrossCod)</td>
+                                <td data-label="Cửa hàng nhận"><b>@Fmt.Vnd(s.Amount)</b></td>
+                                <td data-label="Trạng thái"><StatusBadge Text="@s.Status.Text()" Variant="@s.Status.Css()" /></td>
+                                <td data-label="Ngày lập">@Fmt.Time(s.CreatedAtUtc)</td>
+                                <td data-label="Xác nhận">@Fmt.Time(s.ConfirmedAtUtc)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</StoreGate>
+
+@code {
+    private IReadOnlyList<SettlementDto> list = [];
+
+    protected override async Task LoadStoreAsync()
+    {
+        if (IsOwner) list = await Seller.GetSettlementsAsync(StoreId);
+    }
+}

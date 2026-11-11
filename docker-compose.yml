@@ -1,0 +1,19 @@
+services:
+  sky17:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Development mode seeds demo data. For a real deployment use Production and set Seed__AdminEmail/Seed__AdminPassword.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      Seed__DemoPassword: ${SKY17_DEMO_PASSWORD:-Sky17@Dev2026}
+      Seed__AdminEmail: ${SKY17_ADMIN_EMAIL:-}
+      Seed__AdminPassword: ${SKY17_ADMIN_PASSWORD:-}
+    volumes:
+      - sky17-data:/app/data
+      - sky17-uploads:/app/wwwroot/uploads
+    restart: unless-stopped
+
+volumes:
+  sky17-data:
+  sky17-uploads:

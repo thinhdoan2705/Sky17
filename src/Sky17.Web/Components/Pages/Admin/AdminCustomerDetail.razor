@@ -1,0 +1,58 @@
+@page "/admin/customers/{UserId}"
+@inherits PortalPage
+@inject IAdminService Admin
+
+@if (Loading) { <Skeleton Cards="1" Lines="6" /> }
+else if (d is null) { <EmptyState Icon="☺" Title="Không tìm thấy khách hàng"><a class="btn" href="/admin/customers">Về danh sách</a></EmptyState> }
+else
+{
+    <PageHeader Title="@d.Customer.FullName" Subtitle="@($"{d.Customer.Email} · {d.Customer.PhoneNumber}")">
+        <Actions>
+            <StatusBadge Text="@(d.Customer.IsActive ? "Đang hoạt động" : "Đã vô hiệu hóa")" Variant="@(d.Customer.IsActive ? "green" : "red")" />
+            <button class="btn @(d.Customer.IsActive ? "btn-outline danger-text" : "btn-green")" @onclick="() => confirm = true">@(d.Customer.IsActive ? "Vô hiệu hóa" : "Kích hoạt")</button>
+        </Actions>
+    </PageHeader>
+    <div class="kpis">
+        <KpiCard Icon="▣" Label="Số đơn" Value="@d.Customer.OrderCount.ToString()" />
+        <KpiCard Icon="◉" Variant="green" Label="Đã chi tiêu" Value="@Fmt.Vnd(d.Customer.TotalSpent)" Note="Đơn đã giao" />
+        <KpiCard Icon="📍" Variant="purple" Label="Địa chỉ đã lưu" Value="@d.Addresses.Count.ToString()" />
+        <KpiCard Icon="☺" Variant="orange" Label="Ngày tham gia" Value="@Fmt.Date(d.Customer.CreatedAtUtc)" />
+    </div>
+    <div class="grid-2">
+        <section class="card">
+            <h2>Lịch sử đơn hàng</h2>
+            @if (d.Orders.Count == 0) { <EmptyState Icon="📭" Title="Chưa có đơn hàng" /> }
+            @foreach (var o in d.Orders)
+            {
+                <a class="row-item" href="/admin/orders/@o.Id">
+                    <div class="grow"><strong>@o.Code · @o.StoreName</strong><span class="small muted">@Fmt.Time(o.PlacedAtUtc)</span></div>
+                    <OrderStatusBadge Status="o.Status" /><b>@Fmt.Vnd(o.GrandTotal)</b>
+                </a>
+            }
+        </section>
+        <section class="card">
+            <h2>Sổ địa chỉ</h2>
+            @foreach (var a in d.Addresses)
+            {
+                <div class="row-item"><div class="grow"><strong>@a.Label @(a.IsDefault ? "(mặc định)" : "")</strong><span class="small muted">@a.RecipientName · @a.PhoneNumber · @a.FullText</span></div></div>
+            }
+        </section>
+    </div>
+}
+
+<ConfirmDialog @bind-Open="confirm" Title="@(d?.Customer.IsActive == true ? "Vô hiệu hóa tài khoản" : "Kích hoạt tài khoản")"
+               Message="@(d?.Customer.IsActive == true ? "Người dùng sẽ bị đăng xuất và không thể đăng nhập lại." : "Người dùng có thể đăng nhập trở lại.")"
+               Danger="@(d?.Customer.IsActive == true)" ConfirmText="Xác nhận" Busy="Busy" OnConfirm="Toggle" />
+
+@code {
+    [Parameter] public string UserId { get; set; } = "";
+    private AdminCustomerDetailDto? d;
+    private bool confirm;
+
+    protected override async Task LoadAsync()
+    {
+        try { d = await Admin.GetCustomerAsync(UserId); } catch (NotFoundException) { d = null; }
+    }
+
+    private Task Toggle(string _) => RunAsync(async () => { await Admin.SetUserActiveAsync(UserId, !d!.Customer.IsActive); confirm = false; }, "Đã cập nhật tài khoản");
+}

@@ -1,0 +1,132 @@
+@page "/Account/Register"
+@using Microsoft.AspNetCore.Identity
+@inject IAccountService Accounts
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Đăng ký | Sky 17</PageTitle>
+
+<h1>Tạo tài khoản</h1>
+<p class="muted">Chọn vai trò của bạn trên Sky 17.</p>
+
+<div class="radio-cards">
+    <a class="radio-card @(Kind == "customer" ? "active" : "")" href="/Account/Register?kind=customer"><span>🛍️</span>Khách hàng</a>
+    <a class="radio-card @(Kind == "seller" ? "active" : "")" href="/Account/Register?kind=seller"><span>🏪</span>Người bán</a>
+    <a class="radio-card @(Kind == "driver" ? "active" : "")" href="/Account/Register?kind=driver"><span>🛵</span>Tài xế</a>
+</div>
+
+@if (Kind != "customer")
+{
+    <div class="alert alert-warning small">Hồ sơ @(Kind == "seller" ? "cửa hàng" : "tài xế") sẽ được quản trị viên xét duyệt trước khi hoạt động.</div>
+}
+
+@if (errors.Count > 0)
+{
+    <div class="alert alert-danger">@foreach (var e in errors) { <div>@e</div> }</div>
+}
+
+<EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register">
+    <DataAnnotationsValidator />
+    <input type="hidden" name="Input.Kind" value="@Input.Kind" />
+    <div class="field">
+        <label for="name">Họ và tên</label>
+        <InputText id="name" @bind-Value="Input.FullName" autocomplete="name" />
+        <ValidationMessage For="() => Input.FullName" />
+    </div>
+    <div class="fields">
+        <div class="field">
+            <label for="email">Email</label>
+            <InputText id="email" @bind-Value="Input.Email" autocomplete="username" />
+            <ValidationMessage For="() => Input.Email" />
+        </div>
+        <div class="field">
+            <label for="phone">Số điện thoại</label>
+            <InputText id="phone" type="tel" @bind-Value="Input.PhoneNumber" placeholder="09xxxxxxxx" />
+            <ValidationMessage For="() => Input.PhoneNumber" />
+        </div>
+    </div>
+    @if (Input.Kind == RegistrationKind.Seller)
+    {
+        <div class="field">
+            <label for="store">Tên cửa hàng</label>
+            <InputText id="store" @bind-Value="Input.StoreName" />
+        </div>
+        <div class="field">
+            <label for="storeAddr">Địa chỉ cửa hàng</label>
+            <InputText id="storeAddr" @bind-Value="Input.StoreAddress" placeholder="Số nhà, đường, phường, thành phố" />
+        </div>
+        <div class="field">
+            <label for="tag">Loại hình (ví dụ: Đồ uống, Cơm & Mì)</label>
+            <InputText id="tag" @bind-Value="Input.StoreTagline" />
+        </div>
+    }
+    @if (Input.Kind == RegistrationKind.Driver)
+    {
+        <div class="fields">
+            <div class="field">
+                <label for="plate">Biển số xe</label>
+                <InputText id="plate" @bind-Value="Input.LicensePlate" placeholder="61A1-12345" />
+            </div>
+            <div class="field">
+                <label for="vehicle">Loại xe</label>
+                <InputText id="vehicle" @bind-Value="Input.VehicleType" placeholder="Xe máy" />
+            </div>
+        </div>
+        <div class="field">
+            <label for="idn">Số CCCD (không bắt buộc)</label>
+            <InputText id="idn" @bind-Value="Input.IdentityNumber" />
+        </div>
+    }
+    <div class="fields">
+        <div class="field">
+            <label for="pw">Mật khẩu</label>
+            <InputText id="pw" type="password" @bind-Value="Input.Password" autocomplete="new-password" />
+            <span class="hint">Tối thiểu 8 ký tự, có chữ thường và chữ số.</span>
+            <ValidationMessage For="() => Input.Password" />
+        </div>
+        <div class="field">
+            <label for="pw2">Nhập lại mật khẩu</label>
+            <InputText id="pw2" type="password" @bind-Value="Input.ConfirmPassword" autocomplete="new-password" />
+            <ValidationMessage For="() => Input.ConfirmPassword" />
+        </div>
+    </div>
+    <button type="submit" class="btn btn-block">Đăng ký</button>
+</EditForm>
+
+<div class="auth-links">
+    <span class="muted">Đã có tài khoản?</span>
+    <a class="link" href="/Account/Login">Đăng nhập →</a>
+</div>
+
+@code {
+    private List<string> errors = [];
+
+    [SupplyParameterFromForm] private RegisterInput Input { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "kind")] private string? KindQuery { get; set; }
+    private string Kind => Input.Kind switch { RegistrationKind.Seller => "seller", RegistrationKind.Driver => "driver", _ => "customer" };
+
+    protected override void OnInitialized()
+    {
+        if (Input is null)
+        {
+            Input = new RegisterInput
+            {
+                Kind = KindQuery switch { "seller" => RegistrationKind.Seller, "driver" => RegistrationKind.Driver, _ => RegistrationKind.Customer },
+            };
+        }
+    }
+
+    public async Task RegisterUser()
+    {
+        var result = await Accounts.RegisterAsync(Input);
+        if (!result.Succeeded)
+        {
+            errors = result.Errors.ToList();
+            return;
+        }
+        var user = await UserManager.FindByIdAsync(result.UserId!);
+        await SignInManager.SignInAsync(user!, isPersistent: false);
+        RedirectManager.RedirectTo(await Accounts.GetHomeUrlAsync(user!.Id));
+    }
+}

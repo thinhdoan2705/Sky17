@@ -1,0 +1,43 @@
+@page "/notifications"
+@attribute [Authorize]
+@inherits PortalPage
+@inject INotificationService Notifs
+
+<PageHeader Title="Thông báo" Subtitle="Cập nhật mới nhất về đơn hàng và tài khoản">
+    <Actions>
+        @if (items.Any(i => !i.IsRead)) { <button class="btn btn-soft" disabled="@Busy" @onclick="MarkAllAsync">✓ Đánh dấu đã đọc</button> }
+    </Actions>
+</PageHeader>
+
+@if (Loading) { <Skeleton Lines="6" /> }
+else if (items.Count == 0) { <div class="card"><EmptyState Icon="🔔" Title="Chưa có thông báo" /></div> }
+else
+{
+    <div class="card">
+        @foreach (var n in items)
+        {
+            <div class="row-item" style="@(n.IsRead ? "" : "background:#f4f8ff;border-radius:10px;padding-left:10px")">
+                <div class="avatar">@(n.Type switch { "order" => "📦", "job" => "🛵", "settlement" => "💰", "store" => "🏪", "driver" => "🪪", _ => "🔔" })</div>
+                <div class="grow">
+                    <strong>@n.Title</strong>
+                    <span class="small">@n.Message</span>
+                    <div class="small muted">@Fmt.Time(n.CreatedAtUtc)</div>
+                </div>
+                @if (!string.IsNullOrEmpty(n.Link)) { <button class="btn btn-soft btn-sm" @onclick="() => OpenAsync(n)">Xem</button> }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<NotificationDto> items = [];
+    private Task MarkAllAsync() => RunAsync(() => Notifs.MarkAllReadAsync(), "Đã đánh dấu tất cả là đã đọc");
+
+    protected override async Task LoadAsync() => items = await Notifs.GetMineAsync(100);
+
+    private async Task OpenAsync(NotificationDto n)
+    {
+        if (!n.IsRead) await Notifs.MarkReadAsync(n.Id);
+        Nav.NavigateTo(n.Link!);
+    }
+}

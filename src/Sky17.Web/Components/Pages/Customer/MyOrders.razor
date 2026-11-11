@@ -1,0 +1,40 @@
+@page "/orders"
+@attribute [Authorize(Roles = Roles.Customer)]
+@inherits PortalPage
+@inject ICustomerOrderService Orders
+
+<PageHeader Title="Đơn hàng của tôi" Subtitle="Theo dõi trạng thái và lịch sử đặt hàng" />
+
+@if (Loading) { <Skeleton Lines="5" /> }
+else if (page is null || page.TotalCount == 0)
+{
+    <div class="card"><EmptyState Icon="📦" Title="Bạn chưa có đơn hàng nào"><a class="btn" href="/">Đặt món ngay</a></EmptyState></div>
+}
+else
+{
+    <div class="stack">
+        @foreach (var o in page.Items)
+        {
+            <a class="card row-item" href="/orders/@o.Code" style="padding:16px">
+                <div class="avatar">📦</div>
+                <div class="grow">
+                    <strong>@o.Code · @o.StoreName</strong>
+                    <span class="small muted">@o.ItemCount món · @Fmt.Time(o.PlacedAtUtc)</span>
+                </div>
+                <div class="text-right">
+                    <OrderStatusBadge Status="o.Status" />
+                    <div class="strong mt-1">@Fmt.Vnd(o.GrandTotal)</div>
+                </div>
+            </a>
+        }
+    </div>
+    <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "page")] public int? PageNo { get; set; }
+    private PagedResult<OrderSummaryDto>? page;
+
+    protected override async Task LoadAsync() => page = await Orders.GetMyOrdersAsync(PageNo ?? 1);
+    private void Go(int p) => Nav.NavigateTo($"/orders?page={p}");
+}

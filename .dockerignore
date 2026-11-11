@@ -1,0 +1,7 @@
+**/bin
+**/obj
+**/Data/*.db*
+**/wwwroot/uploads
+.vs
+.vscode
+*.user

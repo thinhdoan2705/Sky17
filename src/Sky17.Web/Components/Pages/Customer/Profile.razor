@@ -1,0 +1,57 @@
+@page "/profile"
+@attribute [Authorize]
+@inherits PortalPage
+@inject IProfileService Profiles
+
+<PageHeader Title="Hồ sơ cá nhân" Subtitle="Thông tin tài khoản Sky 17" />
+
+@if (Loading || me is null) { <Skeleton Lines="4" /> }
+else
+{
+    <div class="grid-2">
+        <section class="card">
+            <h2>Thông tin cá nhân</h2>
+            <EditForm Model="input" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <div class="field"><label>Email đăng nhập</label><input value="@me.Email" disabled /></div>
+                <div class="field"><label for="fn">Họ và tên</label><InputText id="fn" @bind-Value="input.FullName" /><ValidationMessage For="() => input.FullName" /></div>
+                <div class="field"><label for="ph">Số điện thoại</label><InputText id="ph" type="tel" @bind-Value="input.PhoneNumber" /><ValidationMessage For="() => input.PhoneNumber" /></div>
+                <button class="btn" type="submit" disabled="@Busy">Lưu thay đổi</button>
+            </EditForm>
+        </section>
+        <section class="card">
+            <h2>Tài khoản</h2>
+            <div class="row-item"><span class="grow muted">Vai trò</span><b>@string.Join(", ", me.Roles.Select(Labels.RoleText))</b></div>
+            @if (me.Roles.Contains(Roles.Admin)) { <a class="row-item" href="/admin"><span class="grow">🛡️ Trang quản trị</span>›</a> }
+            @if (me.Roles.Contains(Roles.Seller)) { <a class="row-item" href="/seller"><span class="grow">🏪 Quản lý cửa hàng</span>›</a> }
+            @if (me.Roles.Contains(Roles.Driver)) { <a class="row-item" href="/driver"><span class="grow">🛵 Ứng dụng tài xế</span>›</a> }
+            @if (me.Roles.Contains(Roles.Customer))
+            {
+                <a class="row-item" href="/orders"><span class="grow">📦 Đơn hàng của tôi</span>›</a>
+                <a class="row-item" href="/addresses"><span class="grow">📍 Sổ địa chỉ</span>›</a>
+            }
+            <a class="row-item" href="/notifications"><span class="grow">🔔 Thông báo</span>›</a>
+            <a class="row-item" href="/Account/Manage/ChangePassword" data-enhance-nav="false"><span class="grow">🔑 Đổi mật khẩu</span>›</a>
+            <form action="/Account/Logout" method="post" data-enhance="false" class="mt-2">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="/" />
+                <button type="submit" class="btn btn-outline btn-block danger-text">Đăng xuất</button>
+            </form>
+        </section>
+    </div>
+}
+
+@code {
+    private ProfileDto? me;
+    private ProfileInput input = new();
+
+    protected override async Task LoadAsync()
+    {
+        me = await Profiles.GetMineAsync();
+        input = new ProfileInput { FullName = me.FullName, PhoneNumber = me.PhoneNumber };
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private Task SaveAsync() => RunAsync(() => Profiles.UpdateMineAsync(input), "Đã cập nhật hồ sơ");
+}

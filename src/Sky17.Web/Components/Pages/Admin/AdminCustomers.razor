@@ -1,0 +1,47 @@
+@page "/admin/customers"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Khách hàng" Subtitle="Tra cứu tài khoản khách hàng và lịch sử đặt hàng" />
+
+<div class="card">
+    <div class="table-toolbar">
+        <input class="search" placeholder="⌕ Tên, email, số điện thoại..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm khách hàng" />
+    </div>
+    @if (Loading) { <Skeleton Lines="6" /> }
+    else if (page is null || page.TotalCount == 0) { <EmptyState Icon="☺" Title="Không tìm thấy khách hàng" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Khách hàng</th><th>Email</th><th>Điện thoại</th><th>Số đơn</th><th>Đã chi tiêu</th><th>Tài khoản</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in page.Items)
+                    {
+                        <tr>
+                            <td data-label="Khách hàng"><strong>@c.FullName</strong><span class="muted small">Từ @Fmt.Date(c.CreatedAtUtc)</span></td>
+                            <td data-label="Email">@c.Email</td>
+                            <td data-label="Điện thoại">@(c.PhoneNumber ?? "—")</td>
+                            <td data-label="Số đơn">@c.OrderCount</td>
+                            <td data-label="Đã chi tiêu">@Fmt.Vnd(c.TotalSpent)</td>
+                            <td data-label="Tài khoản"><StatusBadge Text="@(c.IsActive ? "Hoạt động" : "Vô hiệu")" Variant="@(c.IsActive ? "green" : "red")" /></td>
+                            <td class="actions"><a class="btn btn-soft btn-sm" href="/admin/customers/@c.UserId">Chi tiết</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+    }
+</div>
+
+@code {
+    private string search = "";
+    private int pageNo = 1;
+    private PagedResult<AdminCustomerDto>? page;
+
+    protected override async Task LoadAsync() => page = await Admin.GetCustomersAsync(search, pageNo);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+    private async Task Filter() { pageNo = 1; await ReloadAsync(); }
+    private async Task Go(int p) { pageNo = p; await ReloadAsync(); }
+}

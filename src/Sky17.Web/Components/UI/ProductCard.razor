@@ -1,0 +1,27 @@
+<article class="card product @(Product.IsAvailable ? "" : "inactive")">
+    <a href="/products/@Product.Id">
+        <div class="product-photo">
+            @if (!string.IsNullOrEmpty(Product.ImageUrl)) { <img src="@Product.ImageUrl" alt="@Product.Name" loading="lazy" /> }
+            else { @Product.Emoji }
+        </div>
+        <h3>@Product.Name</h3>
+    </a>
+    <div class="muted small">@Product.StoreName@(Product.CategoryName is null ? "" : " · " + Product.CategoryName)</div>
+    <div class="product-foot">
+        <span class="product-price">@Fmt.Vnd(Product.Price)</span>
+        @if (!Product.IsAvailable)
+        {
+            <span class="stock-out">Tạm hết</span>
+        }
+        else if (OnAdd.HasDelegate)
+        {
+            <button class="btn btn-sm" disabled="@Disabled" @onclick="() => OnAdd.InvokeAsync(Product)" aria-label="Thêm @Product.Name vào giỏ">+ Thêm</button>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public ProductCardDto Product { get; set; } = default!;
+    [Parameter] public EventCallback<ProductCardDto> OnAdd { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+}

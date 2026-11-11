@@ -1,0 +1,67 @@
+@* Shared add-to-cart logic: login redirect, role check, single-store switch confirmation. Use via @ref. *@
+@inject ICartService CartService
+@inject CartState Cart
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<ConfirmDialog Open="pending is not null" OpenChanged="v => { if (!v) pending = null; }" Title="Đổi cửa hàng?"
+               Message="@($"{message} Bạn có muốn xóa giỏ hiện tại và thêm món mới?")" ConfirmText="Xóa giỏ & thêm món"
+               Busy="busy" OnConfirm="ReplaceAsync" />
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private (int ProductId, int Qty)? pending;
+    private string message = "";
+    private bool busy;
+
+    public async Task AddAsync(int productId, int quantity = 1)
+    {
+        var user = AuthState is null ? null : (await AuthState).User;
+        if (user?.Identity?.IsAuthenticated != true)
+        {
+            Nav.NavigateTo("/Account/Login?returnUrl=" + Uri.EscapeDataString("/" + Nav.ToBaseRelativePath(Nav.Uri)), forceLoad: true);
+            return;
+        }
+        if (!user.IsInRole(Roles.Customer))
+        {
+            Toasts.Error("Chỉ tài khoản khách hàng mới có thể đặt món.");
+            return;
+        }
+        await AddCoreAsync(productId, quantity, false);
+    }
+
+    private async Task AddCoreAsync(int productId, int quantity, bool replace)
+    {
+        busy = true;
+        try
+        {
+            var r = await CartService.AddAsync(productId, quantity, replace);
+            if (r.RequiresStoreSwitch)
+            {
+                pending = (productId, quantity);
+                message = r.Message;
+            }
+            else if (r.Success)
+            {
+                pending = null;
+                Cart.Set(r.Cart!);
+                Toasts.Success(r.Message);
+            }
+            else
+            {
+                Toasts.Error(r.Message);
+            }
+        }
+        catch (Exception ex) when (ex is DomainException or NotFoundException or ForbiddenException or ConcurrencyConflictException)
+        {
+            Toasts.Error(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task ReplaceAsync(string _) => pending is { } p ? AddCoreAsync(p.ProductId, p.Qty, true) : Task.CompletedTask;
+}

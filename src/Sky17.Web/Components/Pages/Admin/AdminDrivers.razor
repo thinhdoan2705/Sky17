@@ -1,0 +1,59 @@
+@page "/admin/drivers"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Quản lý tài xế" Subtitle="Duyệt hồ sơ, trạng thái hoạt động và công nợ COD" />
+
+<div class="tabs">
+    <button class="@(status is null ? "active" : "")" @onclick="() => SetStatus(null)">Tất cả</button>
+    @foreach (var s in Enum.GetValues<DriverStatus>())
+    {
+        <button class="@(status == s ? "active" : "")" @onclick="() => SetStatus(s)">@s.Text()</button>
+    }
+</div>
+<div class="card">
+    <div class="table-toolbar">
+        <input class="search" placeholder="⌕ Tên, biển số, SĐT..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm tài xế" />
+    </div>
+    @if (Loading) { <Skeleton Lines="6" /> }
+    else if (list.Count == 0) { <EmptyState Icon="🛵" Title="Không có tài xế" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Tài xế</th><th>Phương tiện</th><th>Trạng thái</th><th>Hoạt động</th><th>Đang giao</th><th>Hoàn thành</th><th>Cần nộp COD</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var dr in list)
+                    {
+                        <tr>
+                            <td data-label="Tài xế"><strong>@dr.FullName</strong><span class="muted small">@dr.PhoneNumber</span></td>
+                            <td data-label="Phương tiện">@dr.VehicleType · @dr.LicensePlate</td>
+                            <td data-label="Trạng thái"><StatusBadge Text="@dr.Status.Text()" Variant="@dr.Status.Css()" />@if (!dr.AccountActive) { <span class="danger-text small"> · TK khóa</span> }</td>
+                            <td data-label="Hoạt động"><StatusBadge Text="@(dr.IsOnline ? (dr.ActiveDeliveries > 0 ? "Bận" : "Sẵn sàng") : "Offline")" Variant="@(dr.IsOnline ? (dr.ActiveDeliveries > 0 ? "orange" : "green") : "gray")" /></td>
+                            <td data-label="Đang giao">@dr.ActiveDeliveries</td>
+                            <td data-label="Hoàn thành">@dr.CompletedDeliveries</td>
+                            <td data-label="Cần nộp COD">@Fmt.Vnd(dr.OwedToPlatform)</td>
+                            <td class="actions"><DriverStatusActions Driver="dr" OnChanged="ReloadAsync" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    private DriverStatus? status;
+    private string search = "";
+    private IReadOnlyList<AdminDriverDto> list = [];
+    private bool init;
+
+    protected override async Task LoadAsync()
+    {
+        if (!init) { init = true; if (Enum.TryParse<DriverStatus>(StatusQuery, out var st)) status = st; }
+        list = await Admin.GetDriversAsync(status, search);
+    }
+
+    private async Task SetStatus(DriverStatus? s) { status = s; await ReloadAsync(); }
+}

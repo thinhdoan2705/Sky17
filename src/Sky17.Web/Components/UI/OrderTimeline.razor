@@ -1,0 +1,31 @@
+@* Progress bar over the happy path + full persisted status history. *@
+@if (ShowProgress && Labels.HappyPath.Contains(Status))
+{
+    var idx = Array.IndexOf(Labels.HappyPath, Status);
+    <div class="progress-steps" aria-label="Tiến độ đơn hàng">
+        @for (var i = 0; i < Labels.HappyPath.Length; i++)
+        {
+            <span class="@(i <= idx ? "on" : "")" title="@Labels.HappyPath[i].Text()"></span>
+        }
+    </div>
+    <div class="small muted mb-2">Bước @(idx + 1)/@Labels.HappyPath.Length · @Status.Text()</div>
+}
+<ul class="timeline">
+    @foreach (var (h, i) in History.Select((h, i) => (h, i)))
+    {
+        var last = i == History.Count - 1;
+        var bad = h.To is OrderStatus.Cancelled or OrderStatus.DeliveryFailed or OrderStatus.Returned;
+        <li class="@(bad ? "bad" : last && !OrderStateMachine.IsTerminal(h.To) ? "current" : "done")">
+            <span class="dot"></span>
+            <b>@h.To.Text()</b>
+            <span class="small muted">@Fmt.Time(h.AtUtc)@(string.IsNullOrEmpty(h.ChangedBy) ? "" : " · " + h.ChangedBy)</span>
+            @if (!string.IsNullOrEmpty(h.Reason)) { <div class="small">@h.Reason</div> }
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<OrderHistoryDto> History { get; set; } = [];
+    [Parameter] public OrderStatus Status { get; set; }
+    [Parameter] public bool ShowProgress { get; set; } = true;
+}

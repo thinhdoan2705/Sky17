@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+src/Sky17.Web/Data/*.db
+src/Sky17.Web/Data/*.db-shm
+src/Sky17.Web/Data/*.db-wal
+src/Sky17.Web/wwwroot/uploads/
+TestResults/

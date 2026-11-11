@@ -1,0 +1,48 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject RealtimeState Realtime
+@inject ToastService Toasts
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private IJSObjectReference? module;
+    private DotNetObjectReference<RealtimeListener>? self;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || AuthState is null) return;
+        var state = await AuthState;
+        if (state.User.Identity?.IsAuthenticated != true) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/realtime.js");
+            self = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("start", self);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public async Task OnNotify(RealtimeMessage message)
+    {
+        Toasts.Info($"{message.Title} · {message.Message}");
+        await Realtime.RaiseAsync(message);
+    }
+
+    [JSInvokable]
+    public Task OnReconnected() => Realtime.RaiseAsync(null);
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("detach", self);
+                await module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        self?.Dispose();
+    }
+}

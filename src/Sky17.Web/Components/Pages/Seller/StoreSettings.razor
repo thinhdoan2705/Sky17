@@ -1,0 +1,85 @@
+@page "/seller/store"
+
+<PageHeader Title="Thông tin cửa hàng" Subtitle="Hồ sơ, giờ mở cửa và thành viên" />
+
+<StoreGate>
+    @if (Loading || input is null) { <Skeleton Lines="6" /> }
+    else
+    {
+        <div class="grid-2">
+            <section class="card">
+                <h2>Hồ sơ & giờ mở cửa</h2>
+                @if (!IsOwner) { <div class="alert alert-info small">Bạn là nhân viên; chỉ chủ cửa hàng mới chỉnh sửa được thông tin này.</div> }
+                <EditForm Model="input" OnValidSubmit="Save">
+                    <DataAnnotationsValidator />
+                    <fieldset disabled="@(!IsOwner)" style="border:0;padding:0;margin:0">
+                        <div class="fields">
+                            <div class="field"><label>Tên cửa hàng</label><InputText @bind-Value="input.Name" /><ValidationMessage For="() => input.Name" /></div>
+                            <div class="field"><label>Emoji / biểu tượng</label><InputText @bind-Value="input.Emoji" /></div>
+                            <div class="field"><label>Loại hình</label><InputText @bind-Value="input.Tagline" placeholder="Đồ uống · Ăn nhanh" /></div>
+                            <div class="field"><label>Số điện thoại</label><InputText type="tel" @bind-Value="input.PhoneNumber" /><ValidationMessage For="() => input.PhoneNumber" /></div>
+                        </div>
+                        <div class="field"><label>Địa chỉ lấy hàng</label><InputText @bind-Value="input.Address" /><ValidationMessage For="() => input.Address" /></div>
+                        <div class="field"><label>Mô tả</label><InputTextArea rows="3" @bind-Value="input.Description" /></div>
+                        <div class="fields">
+                            <div class="field"><label>Giờ mở cửa</label><input type="time" @bind="input.OpenTime" /></div>
+                            <div class="field"><label>Giờ đóng cửa</label><input type="time" @bind="input.CloseTime" /><span class="hint">Giờ mở = giờ đóng nghĩa là mở 24/7.</span></div>
+                        </div>
+                        <label class="check"><InputCheckbox @bind-Value="input.IsAcceptingOrders" /> Đang nhận đơn (bỏ chọn để tạm nghỉ)</label>
+                        @if (IsOwner) { <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu thông tin</button></div> }
+                    </fieldset>
+                </EditForm>
+            </section>
+            <section class="card">
+                <h2>Thành viên cửa hàng</h2>
+                @foreach (var m in members)
+                {
+                    <div class="row-item">
+                        <div class="avatar">@Fmt.Initials(m.FullName)</div>
+                        <div class="grow"><strong>@m.FullName</strong><span class="small muted">@m.Email</span></div>
+                        <StatusBadge Text="@m.Role.Text()" Variant="@(m.Role == StoreMemberRole.Owner ? "" : "gray")" />
+                        @if (IsOwner) { <button class="btn btn-ghost btn-sm danger-text" aria-label="Gỡ" @onclick="() => removing = m">✕</button> }
+                    </div>
+                }
+                @if (IsOwner)
+                {
+                    <h3 class="mt-2">Thêm thành viên</h3>
+                    <div class="field"><label>Email tài khoản đã đăng ký</label><input type="email" @bind="newEmail" placeholder="nhanvien@email.com" /></div>
+                    <div class="flex">
+                        <select class="filter" @bind="newRole"><option value="@StoreMemberRole.Staff">Nhân viên</option><option value="@StoreMemberRole.Owner">Đồng chủ cửa hàng</option></select>
+                        <button class="btn" disabled="@(Busy || string.IsNullOrWhiteSpace(newEmail))" @onclick="AddMember">+ Thêm</button>
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</StoreGate>
+
+<ConfirmDialog Open="removing is not null" OpenChanged="v => { if (!v) removing = null; }" Title="Gỡ thành viên?"
+               Message="@($"{removing?.FullName} sẽ không còn quyền truy cập cửa hàng.")" ConfirmText="Gỡ" Danger="true" OnConfirm="Remove" />
+
+@code {
+    private StoreProfileInput? input;
+    private IReadOnlyList<StoreMemberDto> members = [];
+    private string newEmail = "";
+    private StoreMemberRole newRole = StoreMemberRole.Staff;
+    private StoreMemberDto? removing;
+
+    protected override async Task LoadStoreAsync()
+    {
+        input = await Seller.GetStoreProfileAsync(StoreId);
+        members = await Seller.GetMembersAsync(StoreId);
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private Task Save() => RunAsync(async () =>
+    {
+        await Seller.UpdateStoreProfileAsync(StoreId, input!);
+        await Ctx.RefreshAsync(Seller);
+    }, "Đã lưu thông tin cửa hàng");
+
+    private Task AddMember() => RunAsync(async () => { await Seller.AddMemberAsync(StoreId, newEmail, newRole); newEmail = ""; }, "Đã thêm thành viên");
+
+    private Task Remove(string _) => RunAsync(async () => { await Seller.RemoveMemberAsync(StoreId, removing!.Id); removing = null; }, "Đã gỡ thành viên");
+}

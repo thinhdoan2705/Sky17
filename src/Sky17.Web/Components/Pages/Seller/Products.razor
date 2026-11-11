@@ -1,0 +1,98 @@
+@page "/seller/products"
+
+<PageHeader Title="Quản lý sản phẩm" Subtitle="Thêm, sửa, tồn kho và trạng thái bán">
+    <Actions><a class="btn" href="/seller/products/new">+ Thêm sản phẩm</a></Actions>
+</PageHeader>
+
+<StoreGate>
+    <div class="card">
+        <div class="table-toolbar">
+            <input class="search" placeholder="⌕ Tìm sản phẩm..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm sản phẩm" />
+            <select class="filter" @bind="filter" @bind:after="ReloadAsync" aria-label="Lọc">
+                <option value="all">Tất cả</option>
+                <option value="selling">Đang bán</option>
+                <option value="out">Hết hàng / tạm ngưng</option>
+                <option value="hidden">Đã ẩn</option>
+            </select>
+        </div>
+        @if (Loading) { <Skeleton Lines="6" /> }
+        else if (Filtered.Count == 0) { <EmptyState Icon="▦" Title="Không có sản phẩm"><a class="btn" href="/seller/products/new">+ Thêm sản phẩm</a></EmptyState> }
+        else
+        {
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Sản phẩm</th><th>Danh mục</th><th>Giá</th><th>Tồn kho</th><th>Đã bán</th><th>Trạng thái</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var p in Filtered)
+                        {
+                            <tr>
+                                <td data-label="Sản phẩm"><span style="font-size:20px">@p.Emoji</span> <strong>@p.Name</strong></td>
+                                <td data-label="Danh mục">@(p.CategoryName ?? "—")</td>
+                                <td data-label="Giá">@Fmt.Vnd(p.Price)</td>
+                                <td data-label="Tồn kho"><button class="link-btn @(p.Stock <= 5 ? "danger-text" : "")" @onclick="() => OpenStock(p)">@p.Stock ✎</button></td>
+                                <td data-label="Đã bán">@p.SoldQuantity</td>
+                                <td data-label="Trạng thái">
+                                    @if (!p.IsActive) { <StatusBadge Text="Đã ẩn" Variant="gray" /> }
+                                    else if (!p.IsAvailable) { <StatusBadge Text="Tạm ngưng" Variant="orange" /> }
+                                    else if (p.Stock == 0) { <StatusBadge Text="Hết hàng" Variant="red" /> }
+                                    else { <StatusBadge Text="Đang bán" Variant="green" /> }
+                                </td>
+                                <td class="actions">
+                                    <div class="table-actions">
+                                        @if (p.IsActive)
+                                        {
+                                            <button class="btn btn-outline btn-sm" disabled="@Busy" @onclick="() => Toggle(p)">@(p.IsAvailable ? "Tạm ngưng" : "Mở bán")</button>
+                                        }
+                                        <a class="btn btn-soft btn-sm" href="/seller/products/@p.Id">Sửa</a>
+                                        <button class="btn btn-ghost btn-sm danger-text" @onclick="() => deleting = p">Xóa</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</StoreGate>
+
+<Modal Open="stockFor is not null" OpenChanged="v => { if (!v) stockFor = null; }" Title="Cập nhật tồn kho">
+    @if (stockFor is not null)
+    {
+        <p><b>@stockFor.Emoji @stockFor.Name</b></p>
+        <div class="field"><label for="stock">Số lượng tồn kho</label><input id="stock" type="number" min="0" @bind="stockValue" /></div>
+        <div class="form-actions"><button class="btn" disabled="@Busy" @onclick="SaveStock">Lưu</button></div>
+    }
+</Modal>
+
+<ConfirmDialog Open="deleting is not null" OpenChanged="v => { if (!v) deleting = null; }" Title="Xóa sản phẩm?"
+               Message="@($"“{deleting?.Name}” sẽ bị xóa. Nếu sản phẩm đã có đơn hàng, hệ thống sẽ ẩn thay vì xóa để giữ lịch sử.")"
+               ConfirmText="Xóa" Danger="true" Busy="Busy" OnConfirm="Delete" />
+
+@code {
+    private IReadOnlyList<SellerProductDto> products = [];
+    private string search = "";
+    private string filter = "all";
+    private SellerProductDto? stockFor;
+    private int stockValue;
+    private SellerProductDto? deleting;
+
+    private List<SellerProductDto> Filtered => products.Where(p => filter switch
+    {
+        "selling" => p.IsActive && p.IsAvailable && p.Stock > 0,
+        "out" => p.IsActive && (!p.IsAvailable || p.Stock == 0),
+        "hidden" => !p.IsActive,
+        _ => true,
+    }).ToList();
+
+    protected override async Task LoadStoreAsync() => products = await Seller.GetProductsAsync(StoreId, search);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+
+    private void OpenStock(SellerProductDto p) { stockFor = p; stockValue = p.Stock; }
+
+    private Task SaveStock() => RunAsync(async () => { await Seller.SetStockAsync(StoreId, stockFor!.Id, stockValue); stockFor = null; }, "Đã cập nhật tồn kho");
+
+    private Task Toggle(SellerProductDto p) => RunAsync(() => Seller.SetAvailabilityAsync(StoreId, p.Id, !p.IsAvailable), p.IsAvailable ? "Đã tạm ngưng bán" : "Đã mở bán");
+
+    private Task Delete(string _) => RunAsync(async () => { await Seller.DeleteProductAsync(StoreId, deleting!.Id); deleting = null; }, "Đã xóa sản phẩm");
+}

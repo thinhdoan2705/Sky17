@@ -1,0 +1,67 @@
+@page "/seller/categories"
+
+<PageHeader Title="Danh mục sản phẩm" Subtitle="Danh mục chung của Sky 17 và danh mục riêng của cửa hàng">
+    <Actions><button class="btn" @onclick="() => editing = new CategoryInput()">+ Thêm danh mục</button></Actions>
+</PageHeader>
+
+<StoreGate>
+    @if (Loading) { <Skeleton Lines="5" /> }
+    else
+    {
+        <div class="grid-half">
+            <section class="card">
+                <h2>Danh mục của cửa hàng</h2>
+                @if (!list.Any(c => c.StoreId is not null)) { <EmptyState Icon="☷" Title="Chưa có danh mục riêng" Text="Tạo danh mục như “Món mới”, “Combo”..." /> }
+                @foreach (var c in list.Where(c => c.StoreId is not null))
+                {
+                    <div class="row-item">
+                        <div class="avatar">@c.Emoji</div>
+                        <div class="grow"><strong>@c.Name</strong><span class="small muted">@c.ProductCount sản phẩm · @(c.IsActive ? "Hiển thị" : "Ẩn")</span></div>
+                        <button class="btn btn-soft btn-sm" @onclick="() => Edit(c)">Sửa</button>
+                        <button class="btn btn-ghost btn-sm danger-text" @onclick="() => deleting = c">Xóa</button>
+                    </div>
+                }
+            </section>
+            <section class="card">
+                <h2>Danh mục chung (Sky 17)</h2>
+                <p class="small muted">Dùng để khách lọc món trên trang chủ. Do quản trị viên quản lý.</p>
+                @foreach (var c in list.Where(c => c.StoreId is null))
+                {
+                    <div class="row-item"><div class="avatar">@c.Emoji</div><div class="grow"><strong>@c.Name</strong><span class="small muted">@c.ProductCount sản phẩm của bạn</span></div></div>
+                }
+            </section>
+        </div>
+    }
+</StoreGate>
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="@(editing?.Id > 0 ? "Sửa danh mục" : "Thêm danh mục")">
+    @if (editing is not null)
+    {
+        <EditForm Model="editing" OnValidSubmit="Save">
+            <DataAnnotationsValidator />
+            <div class="fields">
+                <div class="field"><label>Tên danh mục</label><InputText @bind-Value="editing.Name" /><ValidationMessage For="() => editing.Name" /></div>
+                <div class="field"><label>Emoji</label><InputText @bind-Value="editing.Emoji" /></div>
+                <div class="field"><label>Thứ tự</label><InputNumber @bind-Value="editing.SortOrder" /></div>
+            </div>
+            <label class="check"><InputCheckbox @bind-Value="editing.IsActive" /> Hiển thị</label>
+            <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu</button></div>
+        </EditForm>
+    }
+</Modal>
+
+<ConfirmDialog Open="deleting is not null" OpenChanged="v => { if (!v) deleting = null; }" Title="Xóa danh mục?"
+               Message="Sản phẩm thuộc danh mục sẽ chuyển thành “Chưa phân loại”." ConfirmText="Xóa" Danger="true" OnConfirm="Delete" />
+
+@code {
+    private IReadOnlyList<CategoryDto> list = [];
+    private CategoryInput? editing;
+    private CategoryDto? deleting;
+
+    protected override async Task LoadStoreAsync() => list = await Seller.GetCategoriesAsync(StoreId);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+
+    private void Edit(CategoryDto c) => editing = new CategoryInput { Id = c.Id, Name = c.Name, Emoji = c.Emoji, SortOrder = c.SortOrder, IsActive = c.IsActive };
+    private Task Save() => RunAsync(async () => { await Seller.SaveCategoryAsync(StoreId, editing!); editing = null; }, "Đã lưu danh mục");
+    private Task Delete(string _) => RunAsync(async () => { await Seller.DeleteCategoryAsync(StoreId, deleting!.Id); deleting = null; }, "Đã xóa danh mục");
+}

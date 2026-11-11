@@ -1,0 +1,46 @@
+@inject IAdminService Admin
+@inject ToastService Toasts
+
+<div class="table-actions flex-wrap">
+    @switch (Driver.Status)
+    {
+        case DriverStatus.PendingApproval:
+            <button class="btn btn-green btn-sm" disabled="@busy" @onclick="Approve">✓ Duyệt</button>
+            <button class="btn btn-outline btn-sm danger-text" @onclick="() => target = DriverStatus.Rejected">Từ chối</button>
+            break;
+        case DriverStatus.Active:
+            <button class="btn btn-outline btn-sm danger-text" @onclick="() => target = DriverStatus.Suspended">Tạm khóa</button>
+            break;
+        default:
+            <button class="btn btn-green btn-sm" disabled="@busy" @onclick="Approve">Kích hoạt</button>
+            break;
+    }
+    <a class="btn btn-soft btn-sm" href="/admin/drivers/@Driver.UserId">Chi tiết</a>
+</div>
+
+<ConfirmDialog Open="target is not null" OpenChanged="v => { if (!v) target = null; }" Title="@(target == DriverStatus.Rejected ? "Từ chối hồ sơ tài xế" : "Tạm khóa tài xế")"
+               Message="@($"{Driver.FullName} sẽ nhận thông báo kèm lý do và không thể nhận đơn.")" AskReason="true" Danger="true" ConfirmText="Xác nhận" Busy="busy" OnConfirm="Confirm" />
+
+@code {
+    [Parameter, EditorRequired] public AdminDriverDto Driver { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private DriverStatus? target;
+    private bool busy;
+
+    private Task Approve() => Set(DriverStatus.Active, null, "Đã duyệt / kích hoạt tài xế");
+    private Task Confirm(string reason) => Set(target!.Value, reason, "Đã cập nhật trạng thái tài xế");
+
+    private async Task Set(DriverStatus s, string? reason, string message)
+    {
+        busy = true;
+        try
+        {
+            await Admin.SetDriverStatusAsync(Driver.UserId, s, reason);
+            target = null;
+            Toasts.Success(message);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException) { Toasts.Error(ex.Message); }
+        finally { busy = false; }
+    }
+}

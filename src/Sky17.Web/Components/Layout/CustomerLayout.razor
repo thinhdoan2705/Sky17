@@ -1,0 +1,68 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject CartState Cart
+@inject ICartService CartService
+@inject NavigationManager Nav
+
+<div class="customer-page">
+    <header class="shop-header">
+        <a class="logo" href="/" style="padding:0"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
+        <form class="shop-search" style="padding:0;border:0;background:none" @onsubmit="Search">
+            <input class="shop-search" style="width:100%;max-width:none" placeholder="⌕ Tìm đồ ăn, thức uống, cửa hàng..." @bind="query" aria-label="Tìm kiếm" />
+        </form>
+        <nav class="shop-nav">
+            <NavLink href="/stores">Cửa hàng</NavLink>
+            <AuthorizeView Roles="Customer">
+                <NavLink href="/orders">Đơn hàng</NavLink>
+                <NavLink href="/cart">🛒 Giỏ hàng (@Cart.Count)</NavLink>
+            </AuthorizeView>
+            <NotificationBell />
+            <UserMenu />
+        </nav>
+        <div class="mobile-only flex">
+            <NotificationBell />
+            <UserMenu />
+        </div>
+    </header>
+    <main class="shop-container">
+        @Body
+    </main>
+    <AuthorizeView Roles="Customer">
+        @if (Cart.Count > 0 && !Nav.Uri.Contains("/cart") && !Nav.Uri.Contains("/checkout"))
+        {
+            <a class="shop-floating-cart" href="/cart">🛒 Xem giỏ hàng (@Cart.Count)</a>
+        }
+    </AuthorizeView>
+    <nav class="mobile-tabs" aria-label="Điều hướng">
+        <NavLink href="/" Match="NavLinkMatch.All" ActiveClass="active"><span>⌂</span>Trang chủ</NavLink>
+        <NavLink href="/stores" ActiveClass="active"><span>▦</span>Cửa hàng</NavLink>
+        <NavLink href="/orders" ActiveClass="active"><span>▤</span>Đơn hàng</NavLink>
+        <NavLink href="/cart" ActiveClass="active"><span>🛒</span>Giỏ (@Cart.Count)</NavLink>
+        <NavLink href="/profile" ActiveClass="active"><span>☻</span>Tài khoản</NavLink>
+    </nav>
+</div>
+<ToastHost />
+<RealtimeListener />
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private string query = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Cart.Changed += OnCartChanged;
+        if (AuthState is not null && (await AuthState).User.IsInRole(Roles.Customer))
+        {
+            try { Cart.Set(await CartService.GetAsync()); } catch (ForbiddenException) { }
+        }
+    }
+
+    private void OnCartChanged() => InvokeAsync(StateHasChanged);
+
+    private void Search()
+    {
+        Nav.NavigateTo("/search?q=" + Uri.EscapeDataString(query.Trim()));
+    }
+
+    public void Dispose() => Cart.Changed -= OnCartChanged;
+}

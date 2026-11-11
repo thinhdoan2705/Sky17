@@ -1,0 +1,51 @@
+@page "/admin/stores"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Cửa hàng đối tác" Subtitle="Duyệt hồ sơ và quản lý cửa hàng trên nền tảng" />
+
+<div class="tabs">
+    <button class="@(status is null ? "active" : "")" @onclick="() => SetStatus(null)">Tất cả</button>
+    @foreach (var s in Enum.GetValues<StoreStatus>())
+    {
+        <button class="@(status == s ? "active" : "")" @onclick="() => SetStatus(s)">@s.Text()</button>
+    }
+</div>
+<div class="table-toolbar">
+    <input class="search" placeholder="⌕ Tên hoặc địa chỉ cửa hàng..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm cửa hàng" />
+</div>
+
+@if (Loading) { <Skeleton Lines="6" /> }
+else if (list.Count == 0) { <div class="card"><EmptyState Icon="🏪" Title="Không có cửa hàng" /></div> }
+else
+{
+    <div class="grid-half">
+        @foreach (var s in list)
+        {
+            <div class="card">
+                <div class="section-title"><h2>@s.Emoji @s.Name</h2><StatusBadge Text="@s.Status.Text()" Variant="@s.Status.Css()" /></div>
+                <p class="muted mb-1">@(s.Tagline ?? "—") · @s.ProductCount sản phẩm · @s.DeliveredOrders đơn đã giao · @Fmt.Vnd(s.Revenue)</p>
+                <p class="small mb-1">📍 @s.Address · 📞 @s.PhoneNumber</p>
+                <p class="small muted">Chủ: @s.OwnerName (@s.OwnerEmail) · Đăng ký @Fmt.Date(s.CreatedAtUtc)</p>
+                @if (!string.IsNullOrEmpty(s.StatusReason)) { <div class="alert alert-warning small">@s.StatusReason</div> }
+                <StoreStatusActions Store="s" OnChanged="ReloadAsync" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    private StoreStatus? status;
+    private string search = "";
+    private IReadOnlyList<AdminStoreDto> list = [];
+    private bool init;
+
+    protected override async Task LoadAsync()
+    {
+        if (!init) { init = true; if (Enum.TryParse<StoreStatus>(StatusQuery, out var st)) status = st; }
+        list = await Admin.GetStoresAsync(status, search);
+    }
+
+    private async Task SetStatus(StoreStatus? s) { status = s; await ReloadAsync(); }
+}

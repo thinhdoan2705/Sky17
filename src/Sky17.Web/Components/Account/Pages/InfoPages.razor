@@ -1,0 +1,32 @@
+@page "/Account/ForgotPasswordConfirmation"
+@page "/Account/ResetPasswordConfirmation"
+@page "/Account/Lockout"
+@page "/Account/AccessDenied"
+@inject NavigationManager Nav
+
+<PageTitle>@title | Sky 17</PageTitle>
+<div class="text-center">
+    <div style="font-size:46px">@icon</div>
+    <h1>@title</h1>
+    <p class="muted">@text</p>
+    <a class="btn" href="@href">@button</a>
+</div>
+
+@code {
+    private string icon = "", title = "", text = "", href = "/", button = "";
+
+    protected override void OnInitialized()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.ToLowerInvariant();
+        (icon, title, text, href, button) = path switch
+        {
+            "/account/forgotpasswordconfirmation" => ("📧", "Kiểm tra email của bạn",
+                "Nếu email đã đăng ký, chúng tôi đã gửi liên kết đặt lại mật khẩu. (Môi trường phát triển: liên kết được ghi vào log máy chủ.)",
+                "/Account/Login", "Về đăng nhập"),
+            "/account/resetpasswordconfirmation" => ("✅", "Đã đặt lại mật khẩu", "Bạn có thể đăng nhập bằng mật khẩu mới.", "/Account/Login", "Đăng nhập"),
+            "/account/lockout" => ("🔒", "Tài khoản tạm thời bị khóa",
+                "Bạn đã nhập sai quá nhiều lần hoặc tài khoản đã bị vô hiệu hóa. Vui lòng thử lại sau hoặc liên hệ hỗ trợ.", "/", "Về trang chủ"),
+            _ => ("⛔", "Không có quyền truy cập", "Tài khoản của bạn không có quyền vào trang này.", "/", "Về trang chủ"),
+        };
+    }
+}

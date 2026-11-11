@@ -1,0 +1,23 @@
+@using Sky17.Web.Components.Account.Shared
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.CustomerLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    <div class="shop-container">
+                        <EmptyState Icon="🔒" Title="Bạn không có quyền truy cập trang này">
+                            <a class="btn" href="/">Về trang chủ</a>
+                        </EmptyState>
+                    </div>
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
+            </NotAuthorized>
+            <Authorizing><div class="shop-container"><Skeleton Lines="4" /></div></Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

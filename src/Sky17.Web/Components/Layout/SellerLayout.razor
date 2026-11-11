@@ -1,0 +1,68 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SellerContext Ctx
+@inject ISellerService Seller
+
+<PortalShell Items="Items" HomeHref="/seller" Breadcrumb="Trang chủ / Quản lý cửa hàng"
+             FootTitle="@(Ctx.Current?.Name ?? "Cửa hàng")" FootSubtitle="@(Ctx.Current?.Role.Text() ?? "Người bán")">
+    <SidebarTop>
+        @if (Ctx.Stores.Count > 1)
+        {
+            <select class="store-switch" aria-label="Chọn cửa hàng" value="@Ctx.StoreId" @onchange="SwitchAsync">
+                @foreach (var s in Ctx.Stores) { <option value="@s.StoreId">@s.Emoji @s.Name</option> }
+            </select>
+        }
+    </SidebarTop>
+    <ChildContent>
+        @if (Ctx.Stores.Count > 1)
+        {
+            <div class="mobile-search">
+                <select class="store-switch" aria-label="Chọn cửa hàng" value="@Ctx.StoreId" @onchange="SwitchAsync">
+                    @foreach (var s in Ctx.Stores) { <option value="@s.StoreId">@s.Emoji @s.Name</option> }
+                </select>
+            </div>
+        }
+        @Body
+    </ChildContent>
+</PortalShell>
+<ToastHost />
+<RealtimeListener />
+
+@code {
+    private IReadOnlyList<PortalShell.NavItem> Items => Ctx.Current?.Role == StoreMemberRole.Staff ? staffItems : ownerItems;
+
+    private static readonly IReadOnlyList<PortalShell.NavItem> ownerItems =
+    [
+        new("/seller", "◫", "Tổng quan", Exact: true, Mobile: true),
+        new("/seller/orders", "▣", "Đơn hàng", Mobile: true),
+        new("/seller/products", "▦", "Sản phẩm", Mobile: true),
+        new("/seller/categories", "☷", "Danh mục"),
+        new("/seller/reports", "◉", "Doanh thu", Mobile: true),
+        new("/seller/settlements", "✓", "Đối soát"),
+        new("/seller/store", "⚙", "Cửa hàng", Mobile: true),
+    ];
+
+    private static readonly IReadOnlyList<PortalShell.NavItem> staffItems =
+    [
+        new("/seller", "◫", "Tổng quan", Exact: true, Mobile: true),
+        new("/seller/orders", "▣", "Đơn hàng", Mobile: true),
+        new("/seller/products", "▦", "Sản phẩm", Mobile: true),
+        new("/seller/categories", "☷", "Danh mục", Mobile: true),
+        new("/seller/reports", "◉", "Doanh thu", Mobile: true),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Ctx.Changed += OnChanged;
+        try { await Ctx.EnsureLoadedAsync(Seller); } catch (ForbiddenException) { }
+    }
+
+    private Task OnChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task SwitchAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id)) await Ctx.SelectAsync(id);
+    }
+
+    public void Dispose() => Ctx.Changed -= OnChanged;
+}

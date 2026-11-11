@@ -1,0 +1,34 @@
+@if (TotalPages > 1)
+{
+    <nav class="pagination" aria-label="Phân trang">
+        <span class="small muted" style="margin-right:auto">@TotalCount kết quả</span>
+        <button disabled="@(Page <= 1)" @onclick="() => Go(Page - 1)" aria-label="Trang trước">‹</button>
+        @foreach (var p in Pages())
+        {
+            if (p == 0) { <span class="muted">…</span> }
+            else { <button class="@(p == Page ? "active" : "")" @onclick="() => Go(p)">@p</button> }
+        }
+        <button disabled="@(Page >= TotalPages)" @onclick="() => Go(Page + 1)" aria-label="Trang sau">›</button>
+    </nav>
+}
+
+@code {
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; } = 1;
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> OnPage { get; set; }
+
+    private Task Go(int p) => OnPage.InvokeAsync(Math.Clamp(p, 1, TotalPages));
+
+    private IEnumerable<int> Pages()
+    {
+        var set = new SortedSet<int> { 1, TotalPages, Page, Page - 1, Page + 1 };
+        var last = 0;
+        foreach (var p in set.Where(p => p >= 1 && p <= TotalPages))
+        {
+            if (last != 0 && p - last > 1) yield return 0;
+            yield return p;
+            last = p;
+        }
+    }
+}

@@ -1,0 +1,42 @@
+@page "/driver/deliveries/{Id:int}"
+@inherits PortalPage
+@inject IDriverService Drivers
+
+@if (Loading) { <Skeleton Lines="6" /> }
+else if (job is null)
+{
+    <PageTitle>Chuyến giao | Sky 17</PageTitle>
+    <EmptyState Icon="🔒" Title="@(LoadError ?? "Không tìm thấy chuyến giao")"><a class="btn" href="/driver">Về tổng quan</a></EmptyState>
+}
+else
+{
+    <PageHeader Title="@($"Đơn {job.Code}")" Subtitle="@($"{job.StoreName} · đặt lúc {Fmt.Time(job.PlacedAtUtc)}")">
+        <Actions><OrderStatusBadge Status="job.Status" /></Actions>
+    </PageHeader>
+    @if (job.IsMine && job.Status == OrderStatus.Delivered)
+    {
+        <div class="alert alert-success">✅ Đã giao lúc @Fmt.Time(job.CompletedAtUtc). COD @Fmt.Vnd(job.CodAmount) đã được ghi nhận vào ví.</div>
+    }
+    <div class="card">
+        <DeliveryCard Job="job">
+            <DriverJobActions Job="job" CanAccept="true" OnChanged="ReloadAsync" />
+        </DeliveryCard>
+        <div class="order-line"><span class="muted">Phí giao hàng (khách trả)</span><span>@Fmt.Vnd(job.DeliveryFee)</span></div>
+        <div class="order-line"><span class="muted">Bạn nhận</span><span class="success-text strong">@Fmt.Vnd(job.DriverEarning)</span></div>
+        <div class="order-line"><span class="muted">Thu hộ từ khách (COD)</span><span class="strong">@Fmt.Vnd(job.CodAmount)</span></div>
+        <div class="order-line"><span class="muted">Nộp về Sky 17 sau khi giao</span><span>@Fmt.Vnd(job.CodAmount - job.DriverEarning)</span></div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private DeliveryJobDto? job;
+
+    protected override async Task LoadAsync()
+    {
+        try { job = await Drivers.GetJobAsync(Id); }
+        catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { job = null; throw; }
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null || m.OrderId == Id;
+}

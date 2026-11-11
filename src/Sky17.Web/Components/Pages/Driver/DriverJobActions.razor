@@ -1,0 +1,81 @@
+@* All driver actions for one delivery. Server enforces state machine + ownership; buttons only reflect it. *@
+@inject IDriverService Drivers
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+@if (!Job.IsMine && Job.Status == OrderStatus.ReadyForPickup)
+{
+    <button class="btn" disabled="@(busy || !CanAccept)" @onclick="Accept">✋ Nhận đơn</button>
+    <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.PickupAddress)" target="_blank" rel="noopener">🗺️ Đường tới cửa hàng</a>
+}
+else if (Job.IsMine)
+{
+    @switch (Job.Status)
+    {
+        case OrderStatus.Assigned:
+            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.PickupAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường lấy hàng</a>
+            <button class="btn" disabled="@busy" @onclick="Pickup">📦 Xác nhận lấy hàng</button>
+            break;
+        case OrderStatus.PickedUp:
+            <button class="btn btn-orange" disabled="@busy" @onclick="Start">🛵 Bắt đầu giao</button>
+            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.DropoffAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường tới khách</a>
+            <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
+            break;
+        case OrderStatus.Delivering:
+            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.DropoffAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường tới khách</a>
+            <button class="btn btn-green" disabled="@busy" @onclick="() => delivering = true">✅ Đã giao & thu @Fmt.Vnd(Job.CodAmount)</button>
+            <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
+            break;
+    }
+}
+@if (ShowDetailLink)
+{
+    <a class="btn btn-soft" href="/driver/deliveries/@Job.OrderId">Chi tiết</a>
+}
+
+<ConfirmDialog @bind-Open="delivering" Title="Xác nhận giao thành công" ConfirmText="Đã giao và thu tiền" Busy="busy"
+               Message="@($"Xác nhận bạn đã giao đơn {Job.Code} và thu đủ {Fmt.Vnd(Job.CodAmount)} tiền mặt từ khách.")"
+               OnConfirm="Delivered" />
+<ConfirmDialog @bind-Open="failing" Title="Báo giao hàng thất bại" ConfirmText="Gửi báo cáo" Danger="true" Busy="busy" AskReason="true"
+               Message="Đơn sẽ được chuyển cho bộ phận vận hành xử lý." Presets="failReasons"
+               OnConfirm="Failed" />
+
+@code {
+    [Parameter, EditorRequired] public DeliveryJobDto Job { get; set; } = default!;
+    [Parameter] public bool CanAccept { get; set; } = true;
+    [Parameter] public bool ShowDetailLink { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool busy, delivering, failing;
+    private static readonly string[] failReasons = ["Không liên lạc được khách", "Sai địa chỉ", "Khách từ chối nhận", "Sự cố phương tiện"];
+
+    private Task Pickup() => Do(() => Drivers.ConfirmPickupAsync(Job.OrderId), "Đã xác nhận lấy hàng");
+    private Task Start() => Do(() => Drivers.StartDeliveryAsync(Job.OrderId), "Bắt đầu giao hàng");
+    private Task Delivered(string _) => Do(() => Drivers.ConfirmDeliveredAsync(Job.OrderId), "Giao hàng thành công! COD đã được ghi nhận.");
+    private Task Failed(string reason) => Do(() => Drivers.ReportFailedAsync(Job.OrderId, reason), "Đã báo giao thất bại");
+
+    private Task Accept() => Do(async () =>
+    {
+        await Drivers.AcceptAsync(Job.OrderId);
+        Nav.NavigateTo($"/driver/deliveries/{Job.OrderId}");
+    }, "Nhận đơn thành công!");
+
+    private async Task Do(Func<Task> action, string success)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            await action();
+            delivering = failing = false;
+            Toasts.Success(success);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException)
+        {
+            Toasts.Error(ex.Message);
+            await OnChanged.InvokeAsync();
+        }
+        finally { busy = false; }
+    }
+}

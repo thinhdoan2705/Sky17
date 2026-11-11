@@ -1,0 +1,53 @@
+@inject NavigationManager Nav
+
+<AuthorizeView>
+    <Authorized>
+        <button class="user-btn" aria-label="Tài khoản" @onclick="() => open = !open">
+            <div class="user">@Fmt.Initials(Name ?? context.User.Identity?.Name)</div>
+        </button>
+        @if (open)
+        {
+            <div class="menu-overlay" @onclick="() => open = false"></div>
+            <div class="dropdown" style="width:270px">
+                <div class="dropdown-head">
+                    <div>
+                        <b>@(Name ?? context.User.Identity?.Name)</b>
+                        <div class="small muted">@string.Join(" · ", Roles.All.Where(context.User.IsInRole).Select(Labels.RoleText))</div>
+                    </div>
+                </div>
+                @if (context.User.IsInRole(Roles.Admin)) { <a class="dd-item" href="/admin">🛡️ Trang quản trị</a> }
+                @if (context.User.IsInRole(Roles.Seller)) { <a class="dd-item" href="/seller">🏪 Quản lý cửa hàng</a> }
+                @if (context.User.IsInRole(Roles.Driver)) { <a class="dd-item" href="/driver">🛵 Ứng dụng tài xế</a> }
+                @if (context.User.IsInRole(Roles.Customer))
+                {
+                    <a class="dd-item" href="/orders">📦 Đơn hàng của tôi</a>
+                    <a class="dd-item" href="/addresses">📍 Sổ địa chỉ</a>
+                }
+                <a class="dd-item" href="/profile">👤 Hồ sơ cá nhân</a>
+                <a class="dd-item" href="/Account/Manage/ChangePassword" data-enhance-nav="false">🔑 Đổi mật khẩu</a>
+                <form action="/Account/Logout" method="post" data-enhance="false">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/" />
+                    <button type="submit" class="dd-item danger-text">↩ Đăng xuất</button>
+                </form>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <a class="btn btn-sm" href="@LoginUrl" data-enhance-nav="false">Đăng nhập</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter] public string? Name { get; set; }
+    private bool open;
+
+    private string LoginUrl
+    {
+        get
+        {
+            var path = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+            return "/Account/Login?returnUrl=" + Uri.EscapeDataString(path);
+        }
+    }
+}

@@ -1,0 +1,47 @@
+@inject IAdminService Admin
+@inject ToastService Toasts
+
+<div class="flex flex-wrap">
+    <a class="btn btn-soft btn-sm" href="/admin/stores/@Store.Id">Xem chi tiết</a>
+    @switch (Store.Status)
+    {
+        case StoreStatus.PendingApproval:
+            <button class="btn btn-green btn-sm" disabled="@busy" @onclick="Approve">✓ Phê duyệt</button>
+            <button class="btn btn-outline btn-sm danger-text" @onclick="() => Ask(StoreStatus.Rejected)">Từ chối</button>
+            break;
+        case StoreStatus.Active:
+            <button class="btn btn-outline btn-sm danger-text" @onclick="() => Ask(StoreStatus.Suspended)">Tạm ngưng</button>
+            break;
+        default:
+            <button class="btn btn-green btn-sm" disabled="@busy" @onclick="Approve">Kích hoạt lại</button>
+            break;
+    }
+</div>
+
+<ConfirmDialog Open="target is not null" OpenChanged="v => { if (!v) target = null; }" Title="@(target == StoreStatus.Rejected ? "Từ chối cửa hàng" : "Tạm ngưng cửa hàng")"
+               Message="@($"Chủ cửa hàng {Store.Name} sẽ nhận thông báo kèm lý do.")" AskReason="true" Danger="true" ConfirmText="Xác nhận" Busy="busy" OnConfirm="Confirm" />
+
+@code {
+    [Parameter, EditorRequired] public AdminStoreDto Store { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private StoreStatus? target;
+    private bool busy;
+
+    private void Ask(StoreStatus s) => target = s;
+    private Task Approve() => Set(StoreStatus.Active, null, Store.Status == StoreStatus.PendingApproval ? "Đã phê duyệt cửa hàng" : "Đã kích hoạt lại cửa hàng");
+    private Task Confirm(string reason) => Set(target!.Value, reason, "Đã cập nhật trạng thái cửa hàng");
+
+    private async Task Set(StoreStatus s, string? reason, string message)
+    {
+        busy = true;
+        try
+        {
+            await Admin.SetStoreStatusAsync(Store.Id, s, reason);
+            target = null;
+            Toasts.Success(message);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException) { Toasts.Error(ex.Message); }
+        finally { busy = false; }
+    }
+}

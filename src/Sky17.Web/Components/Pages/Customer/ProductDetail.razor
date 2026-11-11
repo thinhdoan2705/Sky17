@@ -1,0 +1,70 @@
+@page "/products/{Id:int}"
+@inherits PortalPage
+@inject ICatalogService Catalog
+
+@if (Loading) { <Skeleton Cards="1" Lines="4" /> }
+else if (product is null)
+{
+    <PageTitle>Không tìm thấy | Sky 17</PageTitle>
+    <EmptyState Icon="🍽️" Title="Sản phẩm không tồn tại hoặc đã ngừng bán"><a class="btn" href="/">Về trang chủ</a></EmptyState>
+}
+else
+{
+    <PageTitle>@product.Name | Sky 17</PageTitle>
+    <div class="grid-half">
+        <div class="card">
+            <div class="product-photo" style="height:320px;font-size:120px">
+                @if (product.Images.Count > 0) { <img src="@(selectedImage ?? product.Images[0])" alt="@product.Name" /> } else { @product.Emoji }
+            </div>
+            @if (product.Images.Count > 1)
+            {
+                <div class="thumbs">
+                    @foreach (var img in product.Images)
+                    {
+                        <button class="thumb" style="padding:0" @onclick="() => selectedImage = img"><img src="@img" alt="" /></button>
+                    }
+                </div>
+            }
+        </div>
+        <div class="card">
+            <a class="link small" href="/stores/@product.StoreId">@product.StoreEmoji @product.StoreName ›</a>
+            <h1 class="mt-1">@product.Name</h1>
+            @if (product.CategoryName is not null) { <span class="tag">@product.CategoryName</span> }
+            <p class="product-price" style="font-size:24px;margin:14px 0">@Fmt.Vnd(product.Price)</p>
+            <p class="muted">@(product.Description ?? "Chưa có mô tả cho món này.")</p>
+            @if (!product.IsAvailable)
+            {
+                <div class="alert alert-danger">Món này tạm hết hàng.</div>
+            }
+            else if (!product.StoreOpenNow)
+            {
+                <div class="alert alert-warning">Cửa hàng hiện không nhận đơn.</div>
+            }
+            else
+            {
+                <div class="small muted mb-1">Còn @product.Stock phần</div>
+                <div class="flex">
+                    <div class="qty">
+                        <button aria-label="Giảm" @onclick="() => qty = Math.Max(1, qty - 1)">−</button>
+                        <span>@qty</span>
+                        <button aria-label="Tăng" @onclick="() => qty = Math.Min(product.Stock, qty + 1)">+</button>
+                    </div>
+                    <button class="btn grow" @onclick="Add">Thêm vào giỏ · @Fmt.Vnd(product.Price * qty)</button>
+                </div>
+            }
+        </div>
+    </div>
+}
+<CartAdder @ref="adder" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private ProductDetailDto? product;
+    private string? selectedImage;
+    private int qty = 1;
+    private CartAdder? adder;
+
+    protected override async Task LoadAsync() => product = await Catalog.GetProductAsync(Id);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+    private Task Add() => adder!.AddAsync(Id, qty);
+}

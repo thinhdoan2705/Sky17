@@ -1,0 +1,148 @@
+@page "/admin/orders/{Id:int}"
+@inherits PortalPage
+@inject IAdminService Admin
+
+@if (Loading) { <Skeleton Cards="1" Lines="6" /> }
+else if (o is null) { <EmptyState Icon="📦" Title="@(LoadError ?? "Không tìm thấy đơn hàng")"><a class="btn" href="/admin/orders">Về danh sách</a></EmptyState> }
+else
+{
+    <PageHeader Title="@($"Đơn {o.Code}")" Subtitle="@($"{o.StoreName} · đặt lúc {Fmt.Time(o.PlacedAtUtc)}")">
+        <Actions>
+            <OrderStatusBadge Status="o.Status" />
+            @if (o.Status is OrderStatus.ReadyForPickup or OrderStatus.Assigned)
+            {
+                <button class="btn" @onclick="OpenAssign">@(o.Status == OrderStatus.Assigned ? "↻ Phân công lại" : "+ Phân công tài xế")</button>
+            }
+            @if (o.AllowedNextStatuses.Contains(OrderStatus.ReadyForPickup) && o.Status == OrderStatus.Assigned)
+            {
+                <button class="btn btn-outline" @onclick="() => dialog = Dialog.Unassign">Gỡ tài xế</button>
+            }
+            @if (o.Status == OrderStatus.DeliveryFailed)
+            {
+                <button class="btn btn-orange" @onclick="() => dialog = Dialog.Retry">↻ Giao lại</button>
+                <button class="btn btn-outline" @onclick="() => dialog = Dialog.Return">Hoàn về cửa hàng</button>
+            }
+            @if (o.AllowedNextStatuses.Contains(OrderStatus.DeliveryFailed))
+            {
+                <button class="btn btn-outline danger-text" @onclick="() => dialog = Dialog.Fail">Đánh dấu thất bại</button>
+            }
+            @if (OrderStateMachine.IsBeforePickup(o.Status))
+            {
+                <button class="btn btn-outline" @onclick="() => { distanceKm = (o.DistanceMeters ?? 0) / 1000m; dialog = Dialog.Distance; }">📏 Khoảng cách</button>
+            }
+            @if (o.AllowedNextStatuses.Contains(OrderStatus.Cancelled))
+            {
+                <button class="btn btn-danger" @onclick="() => dialog = Dialog.Cancel">Hủy đơn</button>
+            }
+        </Actions>
+    </PageHeader>
+    @if (o.Status == OrderStatus.Cancelled) { <div class="alert alert-danger">Đã hủy: @o.CancelReason</div> }
+    @if (!string.IsNullOrEmpty(o.FailureReason)) { <div class="alert alert-warning">Lý do thất bại gần nhất: @o.FailureReason</div> }
+    <div class="grid-2">
+        <div class="stack">
+            <OrderSummaryCard Order="o" ShowFinance="true" ShowDriverFinance="true" />
+            <section class="card">
+                <h2>Lịch sử phân công</h2>
+                @if (o.Assignments.Count == 0) { <p class="muted">Chưa có phân công.</p> }
+                @foreach (var a in o.Assignments)
+                {
+                    <div class="row-item">
+                        <div class="avatar">🛵</div>
+                        <div class="grow"><strong><a href="/admin/drivers/@a.DriverId">@a.DriverName</a> · @(a.SelfAccepted ? "Tự nhận" : "Admin phân công")</strong>
+                            <span class="small muted">@Fmt.Time(a.AssignedAtUtc) → @Fmt.Time(a.CompletedAtUtc) @(a.Note is null ? "" : "· " + a.Note)</span></div>
+                        <StatusBadge Text="@(a.IsActive ? "Đang hoạt động" : a.Status.Text())" Variant="@(a.IsActive ? "" : a.Status == AssignmentStatus.Delivered ? "green" : "gray")" />
+                    </div>
+                }
+            </section>
+        </div>
+        <div class="stack">
+            <section class="card">
+                <h2>Khách hàng & giao nhận</h2>
+                <div class="row-item"><span class="grow muted">Khách hàng</span><a class="link" href="/admin/customers/@o.CustomerId">@o.CustomerName</a></div>
+                <div class="row-item"><span class="grow muted">Người nhận</span><b>@o.RecipientName · @o.RecipientPhone</b></div>
+                <div class="row-item"><span class="grow muted">Giao đến</span><span class="text-right">@o.DeliveryAddress</span></div>
+                @if (!string.IsNullOrEmpty(o.DeliveryNote)) { <div class="row-item"><span class="grow muted">Ghi chú</span><span>@o.DeliveryNote</span></div> }
+                <div class="row-item"><span class="grow muted">Lấy tại</span><span class="text-right"><a class="link" href="/admin/stores/@o.StoreId">@o.StoreName</a><br /><span class="small muted">@o.PickupAddress · @o.PickupPhone</span></span></div>
+                <div class="row-item"><span class="grow muted">Khoảng cách</span><span>@Fmt.Distance(o.DistanceMeters)</span></div>
+                <div class="row-item"><span class="grow muted">Tài xế hiện tại</span><span>@(o.DriverName is null ? "—" : $"{o.DriverName} · {o.DriverPlate} · {o.DriverPhone}")</span></div>
+            </section>
+            <section class="card">
+                <h2>Dòng thời gian</h2>
+                <OrderTimeline History="o.History" Status="o.Status" />
+            </section>
+        </div>
+    </div>
+}
+
+<Modal Open="dialog == Dialog.Assign" OpenChanged="Close" Title="Phân công tài xế">
+    @if (drivers.Count == 0) { <EmptyState Icon="🛵" Title="Không có tài xế khả dụng" Text="Chỉ tài xế đã duyệt và tài khoản đang hoạt động mới được phân công." /> }
+    @foreach (var dr in drivers)
+    {
+        <label class="row-item" style="cursor:pointer">
+            <input type="radio" name="driver" checked="@(selectedDriver == dr.UserId)" @onchange="() => selectedDriver = dr.UserId" />
+            <div class="grow"><strong>@dr.FullName</strong><span class="small muted">@dr.LicensePlate · @dr.ActiveDeliveries đơn đang giao</span></div>
+            <StatusBadge Text="@(dr.IsOnline ? "Online" : "Offline")" Variant="@(dr.IsOnline ? "green" : "gray")" />
+        </label>
+    }
+    <div class="form-actions"><button class="btn" disabled="@(Busy || selectedDriver is null)" @onclick="Assign">Phân công</button></div>
+</Modal>
+
+<Modal Open="dialog == Dialog.Distance" OpenChanged="Close" Title="Điều chỉnh khoảng cách giao hàng">
+    <p class="small muted">Nhập quãng đường đo thực tế. Phí giao và tổng tiền COD sẽ được tính lại theo bảng giá hiện hành; khách hàng được thông báo.</p>
+    <div class="fields">
+        <div class="field"><label>Khoảng cách (km)</label><input type="number" min="0.1" step="0.1" @bind="distanceKm" /></div>
+        <div class="field"><label>Lý do</label><input @bind="distanceReason" placeholder="Đo trên bản đồ..." /></div>
+    </div>
+    <div class="form-actions"><button class="btn" disabled="@(Busy || distanceKm <= 0 || string.IsNullOrWhiteSpace(distanceReason))" @onclick="SetDistance">Cập nhật</button></div>
+</Modal>
+
+<ConfirmDialog Open="@(dialog == Dialog.Cancel)" OpenChanged="Close" Title="Hủy đơn hàng" Message="Tồn kho sẽ được hoàn lại nếu tài xế chưa lấy hàng. Các bên liên quan sẽ được thông báo."
+               AskReason="true" Danger="true" ConfirmText="Hủy đơn" Busy="Busy" OnConfirm="Cancel" Presets="adminReasons" />
+<ConfirmDialog Open="@(dialog == Dialog.Unassign)" OpenChanged="Close" Title="Gỡ tài xế" Message="Đơn sẽ trở lại danh sách chờ tài xế."
+               AskReason="true" ConfirmText="Gỡ tài xế" Busy="Busy" OnConfirm="Unassign" />
+<ConfirmDialog Open="@(dialog == Dialog.Fail)" OpenChanged="Close" Title="Đánh dấu giao thất bại" Message="Dùng khi tài xế không thể tự báo cáo."
+               AskReason="true" Danger="true" ConfirmText="Xác nhận" Busy="Busy" OnConfirm="Fail" />
+<ConfirmDialog Open="@(dialog == Dialog.Retry)" OpenChanged="Close" Title="Giao lại đơn hàng" Message="Đơn sẽ trở lại danh sách chờ tài xế để giao lại."
+               AskReason="true" ConfirmText="Giao lại" Busy="Busy" OnConfirm="Retry" />
+<ConfirmDialog Open="@(dialog == Dialog.Return)" OpenChanged="Close" Title="Hoàn trả về cửa hàng" Message="Đơn kết thúc ở trạng thái Đã hoàn trả và tồn kho được hoàn lại."
+               AskReason="true" Danger="true" ConfirmText="Hoàn trả" Busy="Busy" OnConfirm="Return" />
+
+@code {
+    private enum Dialog { None, Assign, Distance, Cancel, Unassign, Fail, Retry, Return }
+
+    [Parameter] public int Id { get; set; }
+    private OrderDetailDto? o;
+    private Dialog dialog;
+    private IReadOnlyList<DriverOptionDto> drivers = [];
+    private string? selectedDriver;
+    private decimal distanceKm;
+    private string distanceReason = "";
+    private static readonly string[] adminReasons = ["Khách yêu cầu hủy qua tổng đài", "Cửa hàng không thể phục vụ", "Nghi ngờ gian lận"];
+
+    protected override async Task LoadAsync()
+    {
+        try { o = await Admin.GetOrderAsync(Id); }
+        catch (NotFoundException) { o = null; }
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null || m.OrderId == Id;
+
+    private Task Close(bool open) { if (!open) dialog = Dialog.None; return Task.CompletedTask; }
+
+    private async Task OpenAssign()
+    {
+        drivers = await Admin.GetAssignableDriversAsync();
+        selectedDriver = null;
+        dialog = Dialog.Assign;
+    }
+
+    private Task Done(Func<Task> action, string message) => RunAsync(async () => { await action(); dialog = Dialog.None; }, message);
+
+    private Task Assign() => Done(() => Admin.AssignDriverAsync(Id, selectedDriver!), "Đã phân công tài xế");
+    private Task SetDistance() => Done(() => Admin.SetDistanceAsync(Id, (int)Math.Round(distanceKm * 1000), distanceReason), "Đã cập nhật khoảng cách và phí giao");
+    private Task Cancel(string r) => Done(() => Admin.CancelOrderAsync(Id, r), "Đã hủy đơn");
+    private Task Unassign(string r) => Done(() => Admin.UnassignDriverAsync(Id, r), "Đã gỡ tài xế");
+    private Task Fail(string r) => Done(() => Admin.MarkDeliveryFailedAsync(Id, r), "Đã đánh dấu giao thất bại");
+    private Task Retry(string r) => Done(() => Admin.ResolveFailedDeliveryAsync(Id, true, r), "Đơn đã trở lại hàng chờ tài xế");
+    private Task Return(string r) => Done(() => Admin.ResolveFailedDeliveryAsync(Id, false, r), "Đã hoàn trả đơn");
+}

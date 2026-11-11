@@ -1,0 +1,33 @@
+@* Simple bar chart from real data points (no static values). *@
+@{
+    var max = Points.Count == 0 ? 0 : Points.Max(Value);
+}
+<div class="chart-wrap">
+    @if (max == 0)
+    {
+        <div class="empty">Chưa có dữ liệu trong khoảng thời gian này</div>
+    }
+    else
+    {
+        <div class="chart" role="img" aria-label="@AriaLabel">
+            @foreach (var (p, i) in Points.Select((p, i) => (p, i)))
+            {
+                var v = Value(p);
+                var h = Math.Max(3, (int)(v * 100 / max));
+                <div class="bar @(i == Points.Count - 1 ? "highlight" : "")" style="height:@h%" title="@($"{p.Date:dd/MM}: {p.Orders} đơn · {Fmt.Vnd(p.Amount)}")">
+                    <span class="bar-value">@(ShowAmount ? Fmt.Compact(p.Amount) : p.Orders.ToString())</span>
+                    <label>@(Points.Count <= 7 ? Fmt.Weekday(p.Date) : p.Date.ToString("dd/MM"))</label>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<DailyPoint> Points { get; set; } = [];
+    /// <summary>true = chart amount (VND), false = chart order count.</summary>
+    [Parameter] public bool ShowAmount { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Biểu đồ";
+
+    private long Value(DailyPoint p) => ShowAmount ? p.Amount : p.Orders;
+}

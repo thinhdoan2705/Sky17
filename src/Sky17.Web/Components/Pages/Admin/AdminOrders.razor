@@ -1,0 +1,80 @@
+@page "/admin/orders"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Quản lý đơn hàng" Subtitle="Theo dõi và xử lý đơn hàng trên toàn hệ thống" />
+
+<div class="card">
+    <div class="table-toolbar">
+        <input class="search" placeholder="⌕ Mã đơn, người nhận, SĐT, cửa hàng..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm đơn" />
+        <div class="flex flex-wrap">
+            <select class="filter" @bind="statusText" @bind:after="Filter" aria-label="Trạng thái">
+                <option value="">Tất cả trạng thái</option>
+                <option value="active">Đang xử lý (chưa kết thúc)</option>
+                @foreach (var s in Enum.GetValues<OrderStatus>()) { <option value="@s">@s.Text()</option> }
+            </select>
+            <select class="filter" @bind="storeText" @bind:after="Filter" aria-label="Cửa hàng">
+                <option value="">Tất cả cửa hàng</option>
+                @foreach (var s in stores) { <option value="@s.Id">@s.Name</option> }
+            </select>
+            <input class="filter" type="date" @bind="from" @bind:after="Filter" aria-label="Từ ngày" />
+            <input class="filter" type="date" @bind="to" @bind:after="Filter" aria-label="Đến ngày" />
+        </div>
+    </div>
+    @if (Loading) { <Skeleton Lines="8" /> }
+    else if (page is null || page.TotalCount == 0) { <EmptyState Icon="📭" Title="Không tìm thấy đơn hàng" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Cửa hàng</th><th>Tài xế</th><th>Tổng tiền</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var o in page.Items)
+                    {
+                        <tr>
+                            <td data-label="Mã đơn"><strong>@o.Code</strong></td>
+                            <td data-label="Khách hàng">@o.CustomerName<span class="muted small">@o.RecipientPhone</span></td>
+                            <td data-label="Cửa hàng">@o.StoreName</td>
+                            <td data-label="Tài xế">@(o.DriverName ?? "—")</td>
+                            <td data-label="Tổng tiền">@Fmt.Vnd(o.GrandTotal)</td>
+                            <td data-label="Trạng thái"><OrderStatusBadge Status="o.Status" /></td>
+                            <td data-label="Ngày tạo">@Fmt.Time(o.PlacedAtUtc)</td>
+                            <td class="actions"><a class="btn btn-soft btn-sm" href="/admin/orders/@o.Id">Chi tiết</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    private string search = "";
+    private string statusText = "";
+    private string storeText = "";
+    private DateOnly? from, to;
+    private int pageNo = 1;
+    private PagedResult<OrderSummaryDto>? page;
+    private IReadOnlyList<AdminStoreDto> stores = [];
+    private bool init;
+
+    protected override async Task LoadAsync()
+    {
+        if (!init)
+        {
+            init = true;
+            statusText = StatusQuery ?? "";
+            stores = await Admin.GetStoresAsync();
+        }
+        var f = new OrderFilter { Search = search, Page = pageNo, From = from, To = to, PageSize = 20 };
+        if (statusText == "active") f.Bucket = "active";
+        else if (Enum.TryParse<OrderStatus>(statusText, out var st)) f.Status = st;
+        if (int.TryParse(storeText, out var sid)) f.StoreId = sid;
+        page = await Admin.SearchOrdersAsync(f);
+    }
+
+    private async Task Filter() { pageNo = 1; await ReloadAsync(); }
+    private async Task Go(int p) { pageNo = p; await ReloadAsync(); }
+}

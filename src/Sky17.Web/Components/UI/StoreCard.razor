@@ -1,0 +1,14 @@
+<a class="card store-card" href="/stores/@Store.Id">
+    <div class="store-art">
+        @if (!string.IsNullOrEmpty(Store.LogoUrl)) { <img src="@Store.LogoUrl" alt="@Store.Name" /> } else { @Store.Emoji }
+    </div>
+    <h3>@Store.Name</h3>
+    <div class="meta">
+        <span>@(Store.Tagline ?? "Cửa hàng") · @Store.ProductCount món</span>
+        @if (Store.IsOpenNow) { <span class="success-text">Đang mở</span> } else { <span class="closed">Đóng cửa</span> }
+    </div>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public StoreCardDto Store { get; set; } = default!;
+}

@@ -1,0 +1,98 @@
+@page "/driver"
+@inherits PortalPage
+@inject IDriverService Drivers
+
+<PageTitle>Tài xế | Sky 17</PageTitle>
+
+@if (Loading || d is null || profile is null) { <Skeleton Cards="3" Lines="4" /> }
+else
+{
+    <div class="page-head">
+        <div>
+            <h1>Xin chào, @profile.FullName! 🛵</h1>
+            <p class="muted" style="margin:0">Sẵn sàng cho những chuyến giao hàng hôm nay?</p>
+        </div>
+        <StatusBadge Text="@($"● {profile.Status.Text()}")" Variant="@profile.Status.Css()" />
+    </div>
+
+    @if (profile.Status == DriverStatus.PendingApproval)
+    {
+        <div class="alert alert-warning">⏳ Hồ sơ của bạn đang chờ quản trị viên duyệt. Bạn sẽ nhận được thông báo khi có thể bắt đầu nhận đơn.</div>
+    }
+    else if (profile.Status is DriverStatus.Suspended or DriverStatus.Rejected)
+    {
+        <div class="alert alert-danger">Tài khoản tài xế @profile.Status.Text().ToLower(): @profile.StatusReason</div>
+    }
+    else if (!d.IsOnline)
+    {
+        <div class="offline-banner">Bạn đang offline. Bật công tắc ở góc trên để nhận đơn mới.</div>
+    }
+
+    <div class="driver-summary">
+        <div class="section-title">
+            <h2 style="color:white;margin:0">Tổng quan hôm nay</h2>
+            <span style="background:#ffffff22;border-radius:20px;padding:6px 11px;font-size:11px">@Fmt.Date(DateTime.UtcNow)</span>
+        </div>
+        <div class="numbers">
+            <div><span style="color:#d7e7ff;font-size:11px">Thu nhập hôm nay</span><strong>@Fmt.Vnd(d.EarningToday)</strong></div>
+            <div><span style="color:#d7e7ff;font-size:11px">Đơn đang làm</span><strong>@d.ActiveCount/@d.MaxActive</strong></div>
+            <div><span style="color:#d7e7ff;font-size:11px">Đã hoàn thành</span><strong>@d.CompletedToday</strong></div>
+        </div>
+    </div>
+
+    <div class="driver-grid">
+        <div class="stack">
+            <section class="card">
+                <div class="section-title"><h2>Đơn của tôi 🛵</h2><span class="tag">@active.Count đang giao</span></div>
+                @if (active.Count == 0) { <EmptyState Icon="🛵" Title="Chưa có đơn đang giao" Text="Nhận đơn từ danh sách bên dưới." /> }
+                @foreach (var j in active)
+                {
+                    <DeliveryCard Job="j"><DriverJobActions Job="j" ShowDetailLink="true" OnChanged="ReloadAsync" /></DeliveryCard>
+                }
+            </section>
+            <section class="card">
+                <div class="section-title"><h2>Đơn đang mở 📦</h2><a class="link" href="/driver/jobs">Xem tất cả (@d.AvailableJobs) →</a></div>
+                @if (available.Count == 0) { <EmptyState Icon="📭" Title="Chưa có đơn sẵn sàng" Text="Bạn sẽ nhận thông báo ngay khi có đơn mới." /> }
+                @foreach (var j in available.Take(3))
+                {
+                    <DeliveryCard Job="j"><DriverJobActions Job="j" CanAccept="CanAccept" OnChanged="ReloadAsync" /></DeliveryCard>
+                }
+            </section>
+        </div>
+        <aside class="stack">
+            <div class="card">
+                <h2>💰 Ví COD</h2>
+                <div class="row-item"><span class="grow muted">Tiền mặt đang giữ</span><strong>@Fmt.Vnd(d.CodHolding)</strong></div>
+                <div class="row-item"><span class="grow muted">Cần nộp về Sky 17</span><strong class="danger-text">@Fmt.Vnd(d.OwedToPlatform)</strong></div>
+                <div class="row-item"><span class="grow muted">Thu nhập chưa đối soát</span><strong class="success-text">@Fmt.Vnd(d.CodHolding - d.OwedToPlatform)</strong></div>
+                <a class="btn btn-soft btn-block mt-1" href="/driver/earnings">Lịch sử thu hộ & đối soát</a>
+            </div>
+            <div class="card">
+                <div class="section-title"><h2>Khu vực hoạt động</h2></div>
+                <div class="map-placeholder" style="min-height:180px">
+                    <div>
+                        <div style="font-size:44px">🗺️</div>
+                        <strong>@profile.ServiceArea</strong>
+                        <p class="small">Chưa tích hợp bản đồ trực tiếp. Dùng nút “Chỉ đường” trên từng đơn để mở Google Maps.</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+}
+
+@code {
+    private DriverDashboardDto? d;
+    private DriverProfileDto? profile;
+    private IReadOnlyList<DeliveryJobDto> active = [];
+    private IReadOnlyList<DeliveryJobDto> available = [];
+    private bool CanAccept => d is { IsOnline: true, Status: DriverStatus.Active } && d.ActiveCount < d.MaxActive;
+
+    protected override async Task LoadAsync()
+    {
+        profile = await Drivers.GetProfileAsync();
+        d = await Drivers.GetDashboardAsync();
+        active = await Drivers.GetMyActiveJobsAsync();
+        available = await Drivers.GetAvailableJobsAsync();
+    }
+}

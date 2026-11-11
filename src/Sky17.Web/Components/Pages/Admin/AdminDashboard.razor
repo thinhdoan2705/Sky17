@@ -1,0 +1,88 @@
+@page "/admin"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="@($"{Greeting}, Admin 👋")" Subtitle="Tình hình vận hành Ship Hoả Tốc Sky 17 (số liệu thời gian thực)">
+    <Actions><button class="btn btn-outline" disabled="@Busy" @onclick="ReloadAsync">↺ Làm mới</button></Actions>
+</PageHeader>
+
+@if (Loading || d is null) { <Skeleton Cards="4" Lines="6" /> }
+else
+{
+    @if (d.PendingStores > 0 || d.PendingDrivers > 0 || d.FailedOrders > 0)
+    {
+        <div class="alert alert-warning flex flex-wrap">
+            <span class="grow">⚠️ Cần xử lý:</span>
+            @if (d.PendingStores > 0) { <a class="btn btn-sm btn-orange" href="/admin/stores?status=PendingApproval">@d.PendingStores cửa hàng chờ duyệt</a> }
+            @if (d.PendingDrivers > 0) { <a class="btn btn-sm btn-orange" href="/admin/drivers?status=PendingApproval">@d.PendingDrivers tài xế chờ duyệt</a> }
+            @if (d.FailedOrders > 0) { <a class="btn btn-sm btn-danger" href="/admin/orders?status=DeliveryFailed">@d.FailedOrders đơn giao thất bại</a> }
+        </div>
+    }
+    <div class="kpis">
+        <KpiCard Icon="▣" Label="Tổng đơn hàng" Value="@d.TotalOrders.ToString("N0")" Note="@($"{d.OrdersToday} đơn hôm nay")" />
+        <KpiCard Icon="⏳" Variant="orange" Label="Đơn chờ xử lý" Value="@d.PendingOrders.ToString()" Note="@($"{d.InDeliveryOrders} đơn đang giao")" />
+        <KpiCard Icon="✓" Variant="green" Label="Đơn đã giao" Value="@d.DeliveredOrders.ToString("N0")" Note="@($"{d.FailedOrders} đơn thất bại cần xử lý")" />
+        <KpiCard Icon="▦" Variant="purple" Label="Cửa hàng hoạt động" Value="@d.ActiveStores.ToString()" Note="@($"{d.ActiveDrivers} tài xế · {d.OnlineDrivers} đang online")" />
+    </div>
+    <div class="kpis">
+        <KpiCard Icon="◉" Variant="green" Label="Tổng giá trị hàng (GMV)" Value="@Fmt.Compact(d.GrossMerchandiseValue)" Note="Đơn đã giao" />
+        <KpiCard Icon="🛵" Label="Tổng phí giao hàng" Value="@Fmt.Compact(d.DeliveryFeeTotal)" />
+        <KpiCard Icon="💵" Variant="orange" Label="COD tài xế chưa nộp" Value="@Fmt.Vnd(d.OutstandingCod)" Note="Sau trừ thu nhập tài xế" />
+        <KpiCard Icon="★" Variant="purple" Label="Doanh thu nền tảng" Value="@Fmt.Compact(d.PlatformRevenue)" Note="Hoa hồng + phần phí giao giữ lại" />
+    </div>
+    <div class="grid-2">
+        <section class="card">
+            <div class="section-title"><h2>Thống kê đơn hàng</h2><span class="tag">7 ngày qua</span></div>
+            <BarChart Points="d.Last7Days" AriaLabel="Số đơn 7 ngày" />
+        </section>
+        <section class="card">
+            <div class="section-title"><h2>Trạng thái đơn hôm nay</h2><span class="tag">@d.OrdersToday đơn</span></div>
+            @if (d.OrdersToday == 0) { <EmptyState Icon="📭" Title="Chưa có đơn hôm nay" /> }
+            @foreach (var (status, count) in d.TodayByStatus)
+            {
+                var pct = d.OrdersToday == 0 ? 0 : count * 100 / d.OrdersToday;
+                <div class="row-item"><div class="grow">@status.Text()</div><strong>@count · @pct%</strong></div>
+                <div class="progress"><span style="width:@pct%;background:@(status == OrderStatus.Delivered ? "var(--green)" : status is OrderStatus.Cancelled or OrderStatus.DeliveryFailed ? "var(--red)" : OrderStateMachine.IsInDelivery(status) ? "var(--orange)" : "var(--primary)")"></span></div>
+            }
+        </section>
+    </div>
+    <div class="grid-2">
+        <section class="card">
+            <div class="section-title"><h2>Đơn hàng gần đây</h2><a href="/admin/orders" class="link">Xem tất cả →</a></div>
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Cửa hàng</th><th>Tổng tiền</th><th>Trạng thái</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var o in d.RecentOrders)
+                        {
+                            <tr>
+                                <td data-label="Mã đơn"><strong>@o.Code</strong><span class="muted small">@Fmt.Time(o.PlacedAtUtc)</span></td>
+                                <td data-label="Khách hàng">@o.CustomerName</td>
+                                <td data-label="Cửa hàng">@o.StoreName</td>
+                                <td data-label="Tổng tiền">@Fmt.Vnd(o.GrandTotal)</td>
+                                <td data-label="Trạng thái"><OrderStatusBadge Status="o.Status" /></td>
+                                <td class="actions"><a class="btn btn-soft btn-sm" href="/admin/orders/@o.Id">Chi tiết</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <section class="card">
+            <div class="section-title"><h2>Hoạt động gần đây</h2><a href="/admin/audit" class="link">Nhật ký →</a></div>
+            @foreach (var a in d.RecentActivities)
+            {
+                <div class="row-item">
+                    <div class="grow"><strong>@a.Action</strong><span class="small muted">@(a.UserName ?? "Hệ thống") · @Fmt.Ago(a.CreatedAtUtc)</span></div>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private AdminDashboardDto? d;
+    private static string Greeting => VnTime.ToLocal(DateTime.UtcNow).Hour switch { < 11 => "Chào buổi sáng", < 14 => "Chào buổi trưa", < 18 => "Chào buổi chiều", _ => "Chào buổi tối" };
+
+    protected override async Task LoadAsync() => d = await Admin.GetDashboardAsync();
+}

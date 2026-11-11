@@ -1,0 +1,24 @@
+@page "/stores"
+@inherits PortalPage
+@inject ICatalogService Catalog
+
+<PageHeader Title="Cửa hàng" Subtitle="Các cửa hàng đối tác đang hoạt động trên Sky 17" />
+
+<div class="table-toolbar">
+    <input class="search" placeholder="⌕ Tìm cửa hàng..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm cửa hàng" />
+</div>
+
+@if (Loading) { <Skeleton Lines="4" /> }
+else if (stores.Count == 0) { <EmptyState Icon="🏪" Title="Không tìm thấy cửa hàng" /> }
+else
+{
+    <div class="store-grid">@foreach (var s in stores) { <StoreCard Store="s" /> }</div>
+}
+
+@code {
+    private string search = "";
+    private IReadOnlyList<StoreCardDto> stores = [];
+
+    protected override async Task LoadAsync() => stores = await Catalog.GetStoresAsync(search, 60);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+}

@@ -1,0 +1,79 @@
+@page "/seller/orders/{Id:int}"
+
+<StoreGate>
+    @if (Loading) { <Skeleton Cards="1" Lines="5" /> }
+    else if (order is null)
+    {
+        <EmptyState Icon="📦" Title="@(LoadError ?? "Không tìm thấy đơn hàng")"><a class="btn" href="/seller/orders">Về danh sách</a></EmptyState>
+    }
+    else
+    {
+        <PageHeader Title="@($"Đơn {order.Code}")" Subtitle="@($"Đặt lúc {Fmt.Time(order.PlacedAtUtc)}")">
+            <Actions>
+                <OrderStatusBadge Status="order.Status" />
+                @foreach (var s in order.AllowedNextStatuses.Where(s => s != OrderStatus.Cancelled))
+                {
+                    <button class="btn" disabled="@Busy" @onclick="() => Move(s)">@s.ActionText()</button>
+                }
+                @if (order.AllowedNextStatuses.Contains(OrderStatus.Cancelled))
+                {
+                    <button class="btn btn-outline danger-text" @onclick="() => rejecting = true">@(order.Status == OrderStatus.Pending ? "Từ chối đơn" : "Hủy đơn")</button>
+                }
+            </Actions>
+        </PageHeader>
+        @if (order.Status == OrderStatus.Cancelled) { <div class="alert alert-danger">Đơn đã hủy: @order.CancelReason</div> }
+        @if (order.Status == OrderStatus.DeliveryFailed) { <div class="alert alert-danger">Giao thất bại: @order.FailureReason</div> }
+        <div class="grid-2">
+            <div class="stack">
+                <OrderSummaryCard Order="order" ShowFinance="true" />
+            </div>
+            <div class="stack">
+                <section class="card">
+                    <h2>Khách hàng</h2>
+                    <p class="mb-0"><b>@order.RecipientName</b> · <a class="link" href="@Fmt.Tel(order.RecipientPhone)">@order.RecipientPhone</a></p>
+                    <p class="muted small">@order.DeliveryAddress</p>
+                    @if (!string.IsNullOrEmpty(order.DeliveryNote)) { <div class="alert alert-info small">📝 @order.DeliveryNote</div> }
+                </section>
+                <section class="card">
+                    <h2>Tài xế</h2>
+                    @if (order.DriverName is not null)
+                    {
+                        <p class="mb-0"><b>@order.DriverName</b> · @order.DriverPlate</p>
+                        @if (OrderStateMachine.IsInDelivery(order.Status)) { <a class="link" href="@Fmt.Tel(order.DriverPhone)">📞 @order.DriverPhone</a> }
+                    }
+                    else { <p class="muted mb-0">@(order.Status == OrderStatus.ReadyForPickup ? "Đang chờ tài xế nhận đơn." : "Chưa phân công.")</p> }
+                </section>
+                <section class="card">
+                    <h2>Lịch sử trạng thái</h2>
+                    <OrderTimeline History="order.History" Status="order.Status" ShowProgress="false" />
+                </section>
+            </div>
+        </div>
+    }
+</StoreGate>
+
+<ConfirmDialog @bind-Open="rejecting" Title="Từ chối / hủy đơn" Message="Khách hàng sẽ nhận được thông báo kèm lý do. Tồn kho sẽ được hoàn lại."
+               AskReason="true" Presets="reasons" ConfirmText="Xác nhận hủy" Danger="true" Busy="Busy" OnConfirm="Reject" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private OrderDetailDto? order;
+    private bool rejecting;
+    private static readonly string[] reasons = ["Hết nguyên liệu", "Cửa hàng quá tải", "Sắp đóng cửa"];
+
+    protected override async Task LoadStoreAsync()
+    {
+        try { order = await Seller.GetOrderAsync(StoreId, Id); }
+        catch (NotFoundException) { order = null; }
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null || m.OrderId == Id;
+
+    private Task Move(OrderStatus target) => RunAsync(() => Seller.ChangeOrderStatusAsync(StoreId, Id, target, null), $"Đã cập nhật: {target.Text()}");
+
+    private Task Reject(string reason) => RunAsync(async () =>
+    {
+        await Seller.ChangeOrderStatusAsync(StoreId, Id, OrderStatus.Cancelled, reason);
+        rejecting = false;
+    }, "Đã hủy đơn hàng");
+}

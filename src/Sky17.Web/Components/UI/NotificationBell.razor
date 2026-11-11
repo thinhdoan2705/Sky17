@@ -1,0 +1,80 @@
+@implements IDisposable
+@inject INotificationService Notifications
+@inject RealtimeState Realtime
+@inject NavigationManager Nav
+
+<AuthorizeView>
+    <Authorized>
+        <button class="icon-circle" aria-label="Thông báo" @onclick="ToggleAsync">
+            🔔
+            @if (unread > 0) { <span class="badge-dot">@(unread > 99 ? "99+" : unread)</span> }
+        </button>
+        @if (open)
+        {
+            <div class="menu-overlay" @onclick="() => open = false"></div>
+            <div class="dropdown">
+                <div class="dropdown-head">
+                    <b>Thông báo</b>
+                    @if (unread > 0) { <button class="link-btn small" @onclick="MarkAllAsync">Đánh dấu đã đọc</button> }
+                </div>
+                <div class="dropdown-list">
+                    @if (items.Count == 0)
+                    {
+                        <div class="empty">Chưa có thông báo</div>
+                    }
+                    @foreach (var n in items)
+                    {
+                        <button class="dd-item @(n.IsRead ? "" : "unread")" @onclick="() => OpenAsync(n)">
+                            <b>@n.Title</b>
+                            <span class="small">@n.Message</span>
+                            <div class="small muted">@Fmt.Ago(n.CreatedAtUtc)</div>
+                        </button>
+                    }
+                </div>
+                <a class="dd-item text-center link" href="/notifications" @onclick="() => open = false">Xem tất cả</a>
+            </div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private bool open;
+    private int unread;
+    private IReadOnlyList<NotificationDto> items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Realtime.Changed += OnChanged;
+        unread = await Notifications.GetUnreadCountAsync();
+    }
+
+    private Task OnChanged(RealtimeMessage? m) => InvokeAsync(async () =>
+    {
+        unread = await Notifications.GetUnreadCountAsync();
+        if (open) items = await Notifications.GetMineAsync(15);
+        StateHasChanged();
+    });
+
+    private async Task ToggleAsync()
+    {
+        open = !open;
+        if (open) items = await Notifications.GetMineAsync(15);
+    }
+
+    private async Task OpenAsync(NotificationDto n)
+    {
+        if (!n.IsRead) await Notifications.MarkReadAsync(n.Id);
+        unread = await Notifications.GetUnreadCountAsync();
+        open = false;
+        if (!string.IsNullOrEmpty(n.Link)) Nav.NavigateTo(n.Link);
+    }
+
+    private async Task MarkAllAsync()
+    {
+        await Notifications.MarkAllReadAsync();
+        unread = 0;
+        items = await Notifications.GetMineAsync(15);
+    }
+
+    public void Dispose() => Realtime.Changed -= OnChanged;
+}

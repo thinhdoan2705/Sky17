@@ -1,0 +1,30 @@
+@* Shows store status notices; renders content only when the seller has a store. *@
+@inherits ComponentBase
+@inject SellerContext Ctx
+
+@if (Ctx.StoreId is null)
+{
+    <div class="card">
+        <EmptyState Icon="🏪" Title="Bạn chưa thuộc cửa hàng nào" Text="Đăng ký cửa hàng mới hoặc nhờ chủ cửa hàng thêm bạn làm nhân viên." />
+    </div>
+}
+else
+{
+    @if (Ctx.Current?.Status == StoreStatus.PendingApproval)
+    {
+        <div class="alert alert-warning">⏳ Cửa hàng đang chờ quản trị viên phê duyệt. Bạn có thể chuẩn bị thực đơn; khách hàng sẽ thấy cửa hàng sau khi được duyệt.</div>
+    }
+    else if (Ctx.Current?.Status == StoreStatus.Suspended)
+    {
+        <div class="alert alert-danger">⛔ Cửa hàng đang bị tạm ngưng hoạt động. Liên hệ quản trị viên để biết thêm chi tiết.</div>
+    }
+    else if (Ctx.Current?.Status == StoreStatus.Rejected)
+    {
+        <div class="alert alert-danger">Hồ sơ cửa hàng đã bị từ chối. Cập nhật thông tin và liên hệ quản trị viên.</div>
+    }
+    @ChildContent
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

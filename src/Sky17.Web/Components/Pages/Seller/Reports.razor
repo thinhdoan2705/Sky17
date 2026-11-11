@@ -1,0 +1,64 @@
+@page "/seller/reports"
+
+<PageHeader Title="Doanh thu cửa hàng" Subtitle="Thống kê đơn đã giao, phí nền tảng và khoản cần đối soát" />
+
+<StoreGate>
+    <div class="card mb-2">
+        <div class="flex flex-wrap">
+            <div class="field mb-0"><label>Từ ngày</label><input type="date" @bind="from" /></div>
+            <div class="field mb-0"><label>Đến ngày</label><input type="date" @bind="to" /></div>
+            <button class="btn" style="align-self:flex-end" disabled="@Busy" @onclick="ReloadAsync">Xem báo cáo</button>
+            <div class="flex" style="align-self:flex-end">
+                <button class="btn btn-soft btn-sm" @onclick="() => Preset(7)">7 ngày</button>
+                <button class="btn btn-soft btn-sm" @onclick="() => Preset(30)">30 ngày</button>
+            </div>
+        </div>
+    </div>
+    @if (Loading || r is null) { <Skeleton Cards="4" Lines="4" /> }
+    else
+    {
+        <div class="kpis">
+            <KpiCard Icon="◉" Label="Doanh thu món" Value="@Fmt.Vnd(r.ProductRevenue)" Note="@($"{r.DeliveredOrders} đơn đã giao")" />
+            <KpiCard Icon="▣" Variant="green" Label="Thực nhận" Value="@Fmt.Vnd(r.NetReceivable)" Note="@($"Sau phí nền tảng {Fmt.Vnd(r.PlatformFees)}")" />
+            <KpiCard Icon="✓" Variant="orange" Label="Đã đối soát" Value="@Fmt.Vnd(r.SettledAmount)" />
+            <KpiCard Icon="⌛" Variant="purple" Label="Chờ đối soát" Value="@Fmt.Vnd(r.UnsettledAmount)" Note="@($"{r.CancelledOrders} đơn đã hủy")" />
+        </div>
+        <section class="card mb-2">
+            <div class="section-title"><h2>Doanh thu theo ngày</h2><span class="tag">@r.From.ToString("dd/MM") – @r.To.ToString("dd/MM")</span></div>
+            <BarChart Points="r.Daily" ShowAmount="true" AriaLabel="Doanh thu theo ngày" />
+        </section>
+        <section class="card">
+            <h2>Sản phẩm bán chạy</h2>
+            @if (r.TopProducts.Count == 0) { <EmptyState Icon="📊" Title="Chưa có đơn đã giao trong khoảng này" /> }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="responsive">
+                        <thead><tr><th>Sản phẩm</th><th>Số lượng</th><th>Doanh thu</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in r.TopProducts)
+                            {
+                                <tr><td data-label="Sản phẩm">@p.Emoji @p.Name</td><td data-label="Số lượng">@p.Quantity</td><td data-label="Doanh thu">@Fmt.Vnd(p.Revenue)</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</StoreGate>
+
+@code {
+    private DateOnly to = DateOnly.FromDateTime(VnTime.ToLocal(DateTime.UtcNow));
+    private DateOnly from = DateOnly.FromDateTime(VnTime.ToLocal(DateTime.UtcNow)).AddDays(-6);
+    private SalesReportDto? r;
+
+    protected override async Task LoadStoreAsync() => r = await Seller.GetSalesReportAsync(StoreId, from, to);
+
+    private async Task Preset(int days)
+    {
+        to = DateOnly.FromDateTime(VnTime.ToLocal(DateTime.UtcNow));
+        from = to.AddDays(-(days - 1));
+        await ReloadAsync();
+    }
+}

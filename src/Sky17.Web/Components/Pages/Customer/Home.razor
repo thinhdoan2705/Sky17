@@ -1,0 +1,106 @@
+@page "/"
+@inherits PortalPage
+@inject ICatalogService Catalog
+@inject IAddressService Addresses
+
+<PageTitle>Ship Hoả Tốc Sky 17 · Đặt món giao nhanh</PageTitle>
+
+<AuthorizeView Roles="Customer">
+    <Authorized>
+        <a class="address-bar" href="/addresses">
+            <span style="font-size:20px">📍</span>
+            <div class="grow">
+                <div class="small muted">Giao đến</div>
+                <b>@(defaultAddress?.FullText ?? "Thêm địa chỉ giao hàng")</b>
+            </div>
+            <span class="link small">Đổi ›</span>
+        </a>
+    </Authorized>
+</AuthorizeView>
+
+<form class="mobile-search" @onsubmit="Search">
+    <input class="shop-search" style="min-width:0;width:100%" placeholder="⌕ Tìm đồ ăn, thức uống..." @bind="query" aria-label="Tìm kiếm" />
+</form>
+
+@if (!serviceAvailable)
+{
+    <div class="alert alert-warning">⚠️ Dịch vụ giao hàng đang tạm ngưng. Bạn vẫn có thể xem thực đơn nhưng chưa thể đặt đơn mới.</div>
+}
+
+<div class="hero">
+    <div>
+        <span style="font-weight:800;color:#cfdefe;letter-spacing:1.8px;font-size:11px">SHIP HOẢ TỐC SKY 17</span>
+        <h1>Đặt món yêu thích,<br>giao nhanh tận cửa! ⚡</h1>
+        <p>Đặt hàng dễ dàng, theo dõi minh bạch, thanh toán khi nhận hàng.</p>
+        <a class="btn" style="background:white;color:#1769e0" href="#products">Khám phá ngay →</a>
+    </div>
+    <div class="hero-emoji">🛵</div>
+</div>
+
+<div class="customer-section">
+    <div class="section-title"><h2>Khám phá danh mục</h2><span class="muted small">Chọn món theo sở thích của bạn</span></div>
+    <div class="customer-categories">
+        <button class="category @(CategoryId is null ? "active" : "")" @onclick="() => ChooseCategory(null)"><span>✨</span>Tất cả</button>
+        @foreach (var c in categories)
+        {
+            <button class="category @(CategoryId == c.Id ? "active" : "")" @onclick="() => ChooseCategory(c.Id)"><span>@c.Emoji</span>@c.Name</button>
+        }
+    </div>
+</div>
+
+<section class="customer-section" id="stores">
+    <div class="section-title"><h2>Cửa hàng nổi bật</h2><a href="/stores" class="link">Xem tất cả →</a></div>
+    @if (Loading) { <Skeleton Lines="3" /> }
+    else if (stores.Count == 0) { <EmptyState Icon="🏪" Title="Chưa có cửa hàng hoạt động" /> }
+    else
+    {
+        <div class="store-grid">
+            @foreach (var s in stores.Take(6)) { <StoreCard Store="s" /> }
+        </div>
+    }
+</section>
+
+<section class="customer-section" id="products">
+    <div class="section-title"><h2>Món ngon hôm nay 🔥</h2><span class="muted small">@products.Count món</span></div>
+    @if (Loading) { <Skeleton Lines="4" /> }
+    else if (products.Count == 0) { <EmptyState Icon="🍽️" Title="Chưa có món trong danh mục này" /> }
+    else
+    {
+        <div class="product-list">
+            @foreach (var p in products) { <ProductCard Product="p" OnAdd="Add" /> }
+        </div>
+    }
+</section>
+
+<CartAdder @ref="adder" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "cat")] public int? CategoryId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private CartAdder? adder;
+    private string query = "";
+    private bool serviceAvailable = true;
+    private AddressDto? defaultAddress;
+    private IReadOnlyList<CategoryDto> categories = [];
+    private IReadOnlyList<StoreCardDto> stores = [];
+    private IReadOnlyList<ProductCardDto> products = [];
+
+    protected override async Task LoadAsync()
+    {
+        serviceAvailable = await Catalog.IsServiceAvailableAsync();
+        categories = await Catalog.GetPlatformCategoriesAsync();
+        stores = await Catalog.GetStoresAsync();
+        products = await Catalog.SearchProductsAsync(new ProductQuery(CategoryId: CategoryId, Take: 24));
+        if (AuthState is not null && (await AuthState).User.IsInRole(Roles.Customer))
+            defaultAddress = (await Addresses.GetMineAsync()).FirstOrDefault(a => a.IsDefault);
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+
+    private void ChooseCategory(int? id) => Nav.NavigateTo(id is null ? "/" : $"/?cat={id}");
+
+    private void Search() => Nav.NavigateTo("/search?q=" + Uri.EscapeDataString(query.Trim()));
+
+    private Task Add(ProductCardDto p) => adder!.AddAsync(p.Id);
+}

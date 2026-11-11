@@ -1,0 +1,51 @@
+@page "/admin/drivers/{UserId}"
+@inherits PortalPage
+@inject IAdminService Admin
+
+@if (Loading) { <Skeleton Cards="1" Lines="6" /> }
+else if (d is null) { <EmptyState Icon="🛵" Title="Không tìm thấy tài xế"><a class="btn" href="/admin/drivers">Về danh sách</a></EmptyState> }
+else
+{
+    <PageHeader Title="@d.Driver.FullName" Subtitle="@($"{d.Driver.VehicleType} · {d.Driver.LicensePlate} · {d.ServiceArea}")">
+        <Actions><StatusBadge Text="@d.Driver.Status.Text()" Variant="@d.Driver.Status.Css()" /><DriverStatusActions Driver="d.Driver" OnChanged="ReloadAsync" /></Actions>
+    </PageHeader>
+    <div class="kpis">
+        <KpiCard Icon="🛵" Label="Đang giao" Value="@d.Driver.ActiveDeliveries.ToString()" Note="@(d.Driver.IsOnline ? "Đang online" : "Offline")" />
+        <KpiCard Icon="✓" Variant="green" Label="Đã hoàn thành" Value="@d.Driver.CompletedDeliveries.ToString()" />
+        <KpiCard Icon="💵" Variant="orange" Label="COD đang giữ" Value="@Fmt.Vnd(d.Driver.CodHolding)" />
+        <KpiCard Icon="↗" Variant="purple" Label="Cần nộp về Sky 17" Value="@Fmt.Vnd(d.Driver.OwedToPlatform)" />
+    </div>
+    <div class="grid-2">
+        <section class="card">
+            <h2>Chuyến giao</h2>
+            @if (d.Deliveries.Count == 0) { <EmptyState Icon="📭" Title="Chưa có chuyến giao" /> }
+            @foreach (var j in d.Deliveries)
+            {
+                <a class="row-item" href="/admin/orders/@j.OrderId">
+                    <div class="grow"><strong>@j.Code · @j.StoreName</strong><span class="small muted">@Fmt.Time(j.PlacedAtUtc) · @j.DropoffAddress</span></div>
+                    <OrderStatusBadge Status="j.Status" /><b>@Fmt.Vnd(j.CodAmount)</b>
+                </a>
+            }
+        </section>
+        <section class="card">
+            <h2>Hồ sơ</h2>
+            <div class="row-item"><span class="grow muted">Email</span><span>@d.Driver.Email</span></div>
+            <div class="row-item"><span class="grow muted">Điện thoại</span><span>@d.Driver.PhoneNumber</span></div>
+            <div class="row-item"><span class="grow muted">CCCD</span><span>@(d.IdentityNumber ?? "—")</span></div>
+            <div class="row-item"><span class="grow muted">Tài khoản</span><span>@(d.Driver.AccountActive ? "Đang hoạt động" : "Đã vô hiệu hóa")</span></div>
+            <div class="row-item"><span class="grow muted">Đăng ký</span><span>@Fmt.Date(d.Driver.CreatedAtUtc)</span></div>
+            @if (!string.IsNullOrEmpty(d.Driver.StatusReason)) { <div class="alert alert-warning small mt-1">@d.Driver.StatusReason</div> }
+            <a class="btn btn-soft btn-block mt-2" href="/admin/finance?tab=drivers">Đối soát COD →</a>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public string UserId { get; set; } = "";
+    private AdminDriverDetailDto? d;
+
+    protected override async Task LoadAsync()
+    {
+        try { d = await Admin.GetDriverAsync(UserId); } catch (NotFoundException) { d = null; }
+    }
+}

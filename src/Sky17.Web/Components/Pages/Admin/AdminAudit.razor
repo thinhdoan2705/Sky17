@@ -1,0 +1,44 @@
+@page "/admin/audit"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Nhật ký hệ thống" Subtitle="Mọi thao tác nghiệp vụ quan trọng đều được ghi lại" />
+
+<div class="card">
+    <div class="table-toolbar">
+        <input class="search" placeholder="⌕ Hành động, mã đơn, nội dung..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm nhật ký" />
+    </div>
+    @if (Loading) { <Skeleton Lines="8" /> }
+    else if (page is null || page.TotalCount == 0) { <EmptyState Icon="☰" Title="Không có nhật ký" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead>
+                <tbody>
+                    @foreach (var a in page.Items)
+                    {
+                        <tr>
+                            <td data-label="Thời gian">@Fmt.Time(a.CreatedAtUtc)</td>
+                            <td data-label="Người thực hiện">@(a.UserName ?? "Hệ thống")</td>
+                            <td data-label="Hành động"><code>@a.Action</code></td>
+                            <td data-label="Đối tượng">@a.EntityType @a.EntityId</td>
+                            <td data-label="Chi tiết" style="white-space:normal;max-width:380px">@a.Details</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+    }
+</div>
+
+@code {
+    private string search = "";
+    private int pageNo = 1;
+    private PagedResult<AuditLogDto>? page;
+
+    protected override async Task LoadAsync() => page = await Admin.GetAuditLogsAsync(search, pageNo);
+    private async Task Filter() { pageNo = 1; await ReloadAsync(); }
+    private async Task Go(int p) { pageNo = p; await ReloadAsync(); }
+}

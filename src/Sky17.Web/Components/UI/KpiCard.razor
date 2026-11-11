@@ -1,0 +1,16 @@
+<div class="card kpi @Variant">
+    <div class="kpi-icon">@Icon</div>
+    <div class="muted">@Label</div>
+    <strong>@Value</strong>
+    @if (!string.IsNullOrEmpty(Note)) { <span class="trend @(Muted ? "muted" : "")">@Note</span> }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = "▣";
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public bool Muted { get; set; } = true;
+    /// <summary>"", "green", "orange", "purple", "red"</summary>
+    [Parameter] public string Variant { get; set; } = "";
+}

@@ -1,0 +1,103 @@
+@page "/seller/products/new"
+@page "/seller/products/{Id:int}"
+
+<PageHeader Title="@(Id is null ? "Thêm sản phẩm" : "Sửa sản phẩm")" Subtitle="Thông tin hiển thị cho khách hàng">
+    <Actions><a class="btn btn-outline" href="/seller/products">← Danh sách</a></Actions>
+</PageHeader>
+
+<StoreGate>
+    @if (Loading) { <Skeleton Lines="6" /> }
+    else if (LoadError is not null) { <div class="alert alert-danger">@LoadError</div> }
+    else
+    {
+        <div class="grid-2">
+            <section class="card">
+                <EditForm Model="input" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+                    <div class="field"><label for="n">Tên sản phẩm</label><InputText id="n" @bind-Value="input.Name" placeholder="Ví dụ: Trà đào cam sả" /><ValidationMessage For="() => input.Name" /></div>
+                    <div class="field"><label for="d">Mô tả</label><InputTextArea id="d" rows="3" @bind-Value="input.Description" /></div>
+                    <div class="fields">
+                        <div class="field"><label for="p">Giá bán (VND)</label><InputNumber id="p" @bind-Value="input.Price" min="1000" step="1000" /><ValidationMessage For="() => input.Price" /></div>
+                        <div class="field"><label for="s">Tồn kho</label><InputNumber id="s" @bind-Value="input.Stock" min="0" /><ValidationMessage For="() => input.Stock" /></div>
+                        <div class="field">
+                            <label for="c">Danh mục</label>
+                            <InputSelect id="c" @bind-Value="input.CategoryId">
+                                <option value="">— Chưa phân loại —</option>
+                                @foreach (var c in categories.Where(c => c.IsActive))
+                                {
+                                    <option value="@c.Id">@c.Emoji @c.Name @(c.StoreId is null ? "" : "(cửa hàng)")</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="field"><label for="e">Emoji minh họa</label><InputText id="e" @bind-Value="input.Emoji" placeholder="🥡" /></div>
+                    </div>
+                    <label class="check"><InputCheckbox @bind-Value="input.IsAvailable" /> Đang mở bán (bỏ chọn để tạm ngưng)</label>
+                    <label class="check"><InputCheckbox @bind-Value="input.IsActive" /> Hiển thị trong thực đơn</label>
+                    <div class="form-actions"><button type="submit" class="btn" disabled="@Busy">💾 Lưu sản phẩm</button></div>
+                </EditForm>
+            </section>
+            <section class="card">
+                <h2>Ảnh sản phẩm</h2>
+                @if (Id is null)
+                {
+                    <p class="muted">Lưu sản phẩm trước, sau đó bạn có thể tải ảnh lên.</p>
+                }
+                else
+                {
+                    <p class="small muted">JPG, PNG hoặc WebP · tối đa 2MB · tối đa 5 ảnh. Ảnh đầu tiên là ảnh đại diện.</p>
+                    <div class="thumbs mb-2">
+                        @foreach (var img in images)
+                        {
+                            <div class="thumb"><img src="@img.Url" alt="" /><button aria-label="Xóa ảnh" disabled="@Busy" @onclick="() => RemoveImage(img.Id)">✕</button></div>
+                        }
+                        @if (images.Count == 0) { <div class="product-photo" style="width:120px;height:120px;font-size:50px">@input.Emoji</div> }
+                    </div>
+                    @if (images.Count < 5)
+                    {
+                        <InputFile OnChange="Upload" accept="image/jpeg,image/png,image/webp" disabled="@Busy" />
+                    }
+                }
+            </section>
+        </div>
+    }
+</StoreGate>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    private ProductInput input = new();
+    private IReadOnlyList<ProductImageDto> images = [];
+    private IReadOnlyList<CategoryDto> categories = [];
+
+    protected override async Task LoadStoreAsync()
+    {
+        categories = await Seller.GetCategoriesAsync(StoreId);
+        if (Id is { } id)
+        {
+            var dto = await Seller.GetProductAsync(StoreId, id);
+            input = dto.Input;
+            images = dto.Images;
+        }
+        else
+        {
+            input = new ProductInput { Price = 0, Stock = 10 };
+        }
+    }
+
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        var newId = await Seller.SaveProductAsync(StoreId, input);
+        if (Id is null) Nav.NavigateTo($"/seller/products/{newId}");
+    }, "Đã lưu sản phẩm", reload: Id is not null);
+
+    private Task Upload(InputFileChangeEventArgs e) => RunAsync(async () =>
+    {
+        var file = e.File;
+        if (file.Size > 2 * 1024 * 1024) throw new DomainException("Ảnh tối đa 2MB.");
+        await using var stream = file.OpenReadStream(2 * 1024 * 1024);
+        await Seller.AddProductImageAsync(StoreId, Id!.Value, stream, file.Name, file.ContentType);
+    }, "Đã tải ảnh lên");
+
+    private Task RemoveImage(int imageId) => RunAsync(() => Seller.RemoveProductImageAsync(StoreId, Id!.Value, imageId), "Đã xóa ảnh");
+}

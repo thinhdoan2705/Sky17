@@ -1,0 +1,50 @@
+<article class="delivery-job">
+    <div class="section-title">
+        <div><a href="/driver/deliveries/@Job.OrderId"><b>@Job.Code</b></a> <span class="muted small">· @Job.StoreName · @Job.ItemCount món</span></div>
+        <OrderStatusBadge Status="Job.Status" />
+    </div>
+    <div class="point">
+        <span class="point-marker">↑</span>
+        <div>
+            <b>Lấy hàng · @Job.StoreName</b>
+            <p class="muted small">@Job.PickupAddress</p>
+            <div class="contact small"><a href="@Fmt.Tel(Job.PickupPhone)">📞 Cửa hàng: @Job.PickupPhone</a></div>
+        </div>
+    </div>
+    <div class="point">
+        <span class="point-marker">⌖</span>
+        <div>
+            <b>Giao đến · @Job.RecipientName</b>
+            <p class="muted small">@Job.DropoffAddress</p>
+            <div class="contact small">
+                @if (Job.CustomerPhone is not null)
+                {
+                    <a href="@Fmt.Tel(Job.CustomerPhone)">📞 Khách: @Job.CustomerPhone</a>
+                }
+                else
+                {
+                    <span class="muted">📞 SĐT khách hiển thị sau khi nhận đơn</span>
+                }
+            </div>
+            @if (!string.IsNullOrEmpty(Job.DeliveryNote)) { <div class="small">📝 @Job.DeliveryNote</div> }
+        </div>
+    </div>
+    <div class="row-item">
+        <div class="grow"><span class="small muted">Phí giao · bạn nhận</span><h3 style="margin:5px 0;color:var(--primary)">@Fmt.Vnd(Job.DriverEarning)</h3></div>
+        <div class="grow"><span class="small muted">Thu hộ COD</span><h3 style="margin:5px 0">@Fmt.Vnd(Job.CodAmount)</h3></div>
+        <div><span class="small muted">Khoảng cách</span><h3 style="margin:5px 0">@Fmt.Distance(Job.DistanceMeters)</h3></div>
+    </div>
+    @if (!string.IsNullOrEmpty(Job.FailureReason) && Job.Status == OrderStatus.DeliveryFailed)
+    {
+        <div class="alert alert-danger small">Thất bại: @Job.FailureReason</div>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="job-actions">@ChildContent</div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public DeliveryJobDto Job { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

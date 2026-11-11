@@ -1,0 +1,77 @@
+@page "/admin/users"
+@inherits PortalPage
+@inject IAdminService Admin
+
+<PageHeader Title="Tài khoản & phân quyền" Subtitle="Quản lý vai trò và trạng thái tài khoản người dùng" />
+
+<div class="card">
+    <div class="table-toolbar">
+        <input class="search" placeholder="⌕ Tên hoặc email..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm tài khoản" />
+        <select class="filter" @bind="role" @bind:after="Filter" aria-label="Vai trò">
+            <option value="">Tất cả vai trò</option>
+            @foreach (var r in Roles.All) { <option value="@r">@Labels.RoleText(r)</option> }
+        </select>
+    </div>
+    @if (Loading) { <Skeleton Lines="8" /> }
+    else if (page is null || page.TotalCount == 0) { <EmptyState Icon="⚿" Title="Không tìm thấy tài khoản" /> }
+    else
+    {
+        <div class="table-scroll">
+            <table class="responsive">
+                <thead><tr><th>Người dùng</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var u in page.Items)
+                    {
+                        <tr>
+                            <td data-label="Người dùng"><strong>@u.FullName</strong><span class="muted small">@u.PhoneNumber</span></td>
+                            <td data-label="Email">@u.Email</td>
+                            <td data-label="Vai trò">@foreach (var r in u.Roles) { <StatusBadge Text="@Labels.RoleText(r)" Variant="@(r == Roles.Admin ? "red" : "")" /> <span> </span> }</td>
+                            <td data-label="Trạng thái"><StatusBadge Text="@(u.IsActive ? "Hoạt động" : "Vô hiệu")" Variant="@(u.IsActive ? "green" : "red")" /></td>
+                            <td data-label="Ngày tạo">@Fmt.Date(u.CreatedAtUtc)</td>
+                            <td class="actions">
+                                <div class="table-actions">
+                                    <button class="btn btn-soft btn-sm" @onclick="() => EditRoles(u)">Vai trò</button>
+                                    <button class="btn btn-outline btn-sm @(u.IsActive ? "danger-text" : "")" @onclick="() => toggling = u">@(u.IsActive ? "Vô hiệu hóa" : "Kích hoạt")</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pagination Page="page.Page" TotalPages="page.TotalPages" TotalCount="page.TotalCount" OnPage="Go" />
+    }
+</div>
+
+<Modal Open="editing is not null" OpenChanged="v => { if (!v) editing = null; }" Title="@($"Vai trò · {editing?.FullName}")">
+    @foreach (var r in Roles.All)
+    {
+        <label class="check"><input type="checkbox" checked="@selected.Contains(r)" @onchange="e => ToggleRole(r, (bool)e.Value!)" /> @Labels.RoleText(r)</label>
+    }
+    <p class="small muted">Thêm vai trò Tài xế sẽ tạo hồ sơ tài xế chờ duyệt. Người dùng sẽ cần đăng nhập lại để quyền mới có hiệu lực.</p>
+    <div class="form-actions"><button class="btn" disabled="@Busy" @onclick="SaveRoles">Lưu vai trò</button></div>
+</Modal>
+
+<ConfirmDialog Open="toggling is not null" OpenChanged="v => { if (!v) toggling = null; }" Title="@(toggling?.IsActive == true ? "Vô hiệu hóa tài khoản" : "Kích hoạt tài khoản")"
+               Message="@(toggling?.IsActive == true ? $"{toggling.FullName} sẽ bị đăng xuất và không thể đăng nhập." : $"{toggling?.FullName} có thể đăng nhập trở lại.")"
+               Danger="@(toggling?.IsActive == true)" ConfirmText="Xác nhận" Busy="Busy" OnConfirm="Toggle" />
+
+@code {
+    private string search = "";
+    private string role = "";
+    private int pageNo = 1;
+    private PagedResult<AdminUserDto>? page;
+    private AdminUserDto? editing, toggling;
+    private HashSet<string> selected = [];
+
+    protected override async Task LoadAsync() => page = await Admin.GetUsersAsync(search, role, pageNo);
+    protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
+    private async Task Filter() { pageNo = 1; await ReloadAsync(); }
+    private async Task Go(int p) { pageNo = p; await ReloadAsync(); }
+
+    private void EditRoles(AdminUserDto u) { editing = u; selected = u.Roles.ToHashSet(); }
+    private void ToggleRole(string r, bool on) { if (on) selected.Add(r); else selected.Remove(r); }
+
+    private Task SaveRoles() => RunAsync(async () => { await Admin.SetUserRolesAsync(editing!.UserId, selected.ToList()); editing = null; }, "Đã cập nhật vai trò");
+    private Task Toggle(string _) => RunAsync(async () => { await Admin.SetUserActiveAsync(toggling!.UserId, !toggling.IsActive); toggling = null; }, "Đã cập nhật tài khoản");
+}

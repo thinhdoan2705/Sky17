@@ -1,0 +1,214 @@
+@page "/admin/finance"
+@inherits PortalPage
+@inject IFinanceService Finance
+
+<PageHeader Title="Đối soát COD" Subtitle="Tiền thu hộ, công nợ tài xế và thanh toán cho cửa hàng" />
+
+@if (o is not null)
+{
+    <div class="kpis">
+        <KpiCard Icon="💵" Label="COD tài xế đang giữ" Value="@Fmt.Vnd(o.CodHeldByDrivers)" Note="@($"Phải nộp về: {Fmt.Vnd(o.OwedByDrivers)}")" />
+        <KpiCard Icon="▦" Variant="orange" Label="Cần thanh toán cửa hàng" Value="@Fmt.Vnd(o.PayableToStores)" />
+        <KpiCard Icon="♧" Variant="purple" Label="Thu nhập tài xế chưa đối soát" Value="@Fmt.Vnd(o.DriverEarningsUnsettled)" />
+        <KpiCard Icon="✓" Variant="green" Label="Đã xác nhận đối soát" Value="@Fmt.Vnd(o.ConfirmedSettlements)" Note="@($"{o.PendingSettlements} phiếu chờ xác nhận · Doanh thu nền tảng {Fmt.Compact(o.PlatformRevenue)}")" />
+    </div>
+}
+
+<div class="tabs">
+    <button class="@(tab == "drivers" ? "active" : "")" @onclick="@(() => SetTab("drivers"))">Công nợ tài xế</button>
+    <button class="@(tab == "stores" ? "active" : "")" @onclick="@(() => SetTab("stores"))">Thanh toán cửa hàng</button>
+    <button class="@(tab == "settlements" ? "active" : "")" @onclick="@(() => SetTab("settlements"))">Phiếu đối soát</button>
+    <button class="@(tab == "cod" ? "active" : "")" @onclick="@(() => SetTab("cod"))">Giao dịch COD</button>
+</div>
+
+<div class="card">
+    @if (Loading) { <Skeleton Lines="6" /> }
+    else if (tab is "drivers" or "stores")
+    {
+        var rows = tab == "drivers" ? driverBalances : storeBalances;
+        <p class="small muted">@(tab == "drivers"
+            ? "Số tiền tài xế phải nộp = COD đã thu − thu nhập tài xế. Lập phiếu, nhận tiền, rồi xác nhận phiếu."
+            : "Số tiền trả cửa hàng = giá trị món − phí nền tảng, cho các đơn đã giao chưa đối soát.")</p>
+        @if (rows.Count == 0) { <EmptyState Icon="✓" Title="Không có khoản nào cần đối soát" /> }
+        else
+        {
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>@(tab == "drivers" ? "Tài xế" : "Cửa hàng")</th><th>Số đơn</th><th>@(tab == "drivers" ? "COD đã thu" : "Giá trị món")</th>@if (tab == "drivers") { <th>Thu nhập</th> }<th>@(tab == "drivers" ? "Phải nộp" : "Phải trả")</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var r in rows)
+                        {
+                            <tr>
+                                <td data-label="Đối tượng"><strong>@r.Name</strong></td>
+                                <td data-label="Số đơn">@r.OrderCount</td>
+                                <td data-label="Tổng">@Fmt.Vnd(r.GrossCod)</td>
+                                @if (tab == "drivers") { <td data-label="Thu nhập">@Fmt.Vnd(r.Earnings)</td> }
+                                <td data-label="Số tiền"><b>@Fmt.Vnd(r.Amount)</b></td>
+                                <td class="actions"><button class="btn btn-sm" @onclick="() => creating = r">Lập phiếu</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    else if (tab == "settlements")
+    {
+        <div class="table-toolbar">
+            <select class="filter" @bind="settlementStatus" @bind:after="ReloadAsync" aria-label="Trạng thái phiếu">
+                <option value="">Tất cả</option>
+                @foreach (var s in Enum.GetValues<SettlementStatus>()) { <option value="@s">@s.Text()</option> }
+            </select>
+        </div>
+        @if (settlements is null || settlements.TotalCount == 0) { <EmptyState Icon="🧾" Title="Chưa có phiếu đối soát" /> }
+        else
+        {
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Mã phiếu</th><th>Loại</th><th>Đối tượng</th><th>Số đơn</th><th>Số tiền</th><th>Trạng thái</th><th>Ngày lập</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in settlements.Items)
+                        {
+                            <tr>
+                                <td data-label="Mã phiếu"><strong>@s.Code</strong></td>
+                                <td data-label="Loại">@s.Type.Text()</td>
+                                <td data-label="Đối tượng">@s.PartyName</td>
+                                <td data-label="Số đơn">@s.OrderCount</td>
+                                <td data-label="Số tiền"><b>@Fmt.Vnd(s.Amount)</b></td>
+                                <td data-label="Trạng thái"><StatusBadge Text="@s.Status.Text()" Variant="@s.Status.Css()" /></td>
+                                <td data-label="Ngày lập">@Fmt.Time(s.CreatedAtUtc)</td>
+                                <td class="actions">
+                                    <div class="table-actions">
+                                        <button class="btn btn-soft btn-sm" @onclick="() => ViewAsync(s.Id)">Xem</button>
+                                        @if (s.Status == SettlementStatus.Pending)
+                                        {
+                                            <button class="btn btn-green btn-sm" @onclick="() => confirming = s">Xác nhận</button>
+                                            <button class="btn btn-ghost btn-sm danger-text" @onclick="() => cancelling = s">Hủy</button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <Pagination Page="settlements.Page" TotalPages="settlements.TotalPages" TotalCount="settlements.TotalCount" OnPage="GoSettlements" />
+        }
+    }
+    else
+    {
+        @if (cod is null || cod.TotalCount == 0) { <EmptyState Icon="💵" Title="Chưa có giao dịch COD" /> }
+        else
+        {
+            <div class="table-scroll">
+                <table class="responsive">
+                    <thead><tr><th>Thời gian</th><th>Đơn</th><th>Tài xế</th><th>Loại</th><th>Số tiền</th><th>Phiếu</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in cod.Items)
+                        {
+                            <tr>
+                                <td data-label="Thời gian">@Fmt.Time(c.CreatedAtUtc)</td>
+                                <td data-label="Đơn"><a class="link" href="/admin/orders/@c.OrderId">@c.OrderCode</a></td>
+                                <td data-label="Tài xế">@c.DriverName</td>
+                                <td data-label="Loại">@c.Type.Text()</td>
+                                <td data-label="Số tiền">@Fmt.Vnd(c.Amount)</td>
+                                <td data-label="Phiếu">@(c.SettlementId?.ToString() ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <Pagination Page="cod.Page" TotalPages="cod.TotalPages" TotalCount="cod.TotalCount" OnPage="GoCod" />
+        }
+    }
+</div>
+
+<Modal Open="creating is not null" OpenChanged="v => { if (!v) creating = null; }" Title="Lập phiếu đối soát">
+    @if (creating is not null)
+    {
+        <p>@(tab == "drivers" ? "Thu COD từ tài xế" : "Thanh toán cho cửa hàng") <b>@creating.Name</b></p>
+        <div class="order-line"><span class="muted">Số đơn</span><b>@creating.OrderCount</b></div>
+        <div class="order-line total"><span>Số tiền</span><span class="primary-text">@Fmt.Vnd(creating.Amount)</span></div>
+        <div class="field"><label>Ghi chú (không bắt buộc)</label><input @bind="note" placeholder="Chuyển khoản / tiền mặt..." /></div>
+        <p class="small muted">Phiếu ở trạng thái “Chờ xác nhận”. Các đơn trong phiếu không thể đưa vào phiếu khác (chống đối soát trùng).</p>
+        <div class="form-actions"><button class="btn" disabled="@Busy" @onclick="Create">Lập phiếu</button></div>
+    }
+</Modal>
+
+<Drawer Open="detail is not null" OpenChanged="v => { if (!v) detail = null; }" Title="@($"Phiếu {detail?.Settlement.Code}")">
+    @if (detail is not null)
+    {
+        <div class="order-line"><span class="muted">Loại</span><span>@detail.Settlement.Type.Text()</span></div>
+        <div class="order-line"><span class="muted">Đối tượng</span><span>@detail.Settlement.PartyName</span></div>
+        <div class="order-line"><span class="muted">Trạng thái</span><StatusBadge Text="@detail.Settlement.Status.Text()" Variant="@detail.Settlement.Status.Css()" /></div>
+        @if (detail.Settlement.Type == SettlementType.Driver)
+        {
+            <div class="order-line"><span class="muted">COD đã thu</span><span>@Fmt.Vnd(detail.Settlement.GrossCod)</span></div>
+            <div class="order-line"><span class="muted">Thu nhập tài xế</span><span>@Fmt.Vnd(detail.Settlement.DriverEarnings)</span></div>
+        }
+        <div class="order-line total"><span>Số tiền</span><span class="primary-text">@Fmt.Vnd(detail.Settlement.Amount)</span></div>
+        @if (!string.IsNullOrEmpty(detail.Settlement.Note)) { <p class="small">📝 @detail.Settlement.Note</p> }
+        @if (!string.IsNullOrEmpty(detail.Settlement.CancelReason)) { <div class="alert alert-danger small">Đã hủy: @detail.Settlement.CancelReason</div> }
+        <h3 class="mt-2">Đơn trong phiếu (@detail.Items.Count)</h3>
+        @foreach (var i in detail.Items)
+        {
+            <div class="row-item"><a class="grow link" href="/admin/orders/@i.OrderId">@i.OrderCode</a><span class="small muted">@Fmt.Time(i.DeliveredAtUtc)</span><b>@Fmt.Vnd(i.Amount)</b></div>
+        }
+    }
+</Drawer>
+
+<ConfirmDialog Open="confirming is not null" OpenChanged="v => { if (!v) confirming = null; }" Title="Xác nhận đối soát"
+               Message="@($"Xác nhận đã {(confirming?.Type == SettlementType.Driver ? "nhận" : "chuyển")} {Fmt.Vnd(confirming?.Amount ?? 0)} cho phiếu {confirming?.Code}. Thao tác không thể hoàn tác.")"
+               ConfirmText="Xác nhận" Busy="Busy" OnConfirm="Confirm" />
+<ConfirmDialog Open="cancelling is not null" OpenChanged="v => { if (!v) cancelling = null; }" Title="Hủy phiếu đối soát"
+               Message="Các đơn trong phiếu sẽ trở về trạng thái chưa đối soát." AskReason="true" Danger="true" ConfirmText="Hủy phiếu" Busy="Busy" OnConfirm="Cancel" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+    private string tab = "drivers";
+    private bool init;
+    private FinanceOverviewDto? o;
+    private IReadOnlyList<PartyBalanceDto> driverBalances = [], storeBalances = [];
+    private PagedResult<SettlementDto>? settlements;
+    private PagedResult<CodRecordDto>? cod;
+    private string settlementStatus = "";
+    private int settlementPage = 1, codPage = 1;
+    private PartyBalanceDto? creating;
+    private string note = "";
+    private SettlementDetailDto? detail;
+    private SettlementDto? confirming, cancelling;
+
+    protected override async Task LoadAsync()
+    {
+        if (!init) { init = true; if (TabQuery is "drivers" or "stores" or "settlements" or "cod") tab = TabQuery; }
+        o = await Finance.GetOverviewAsync();
+        switch (tab)
+        {
+            case "drivers": driverBalances = await Finance.GetDriverBalancesAsync(); break;
+            case "stores": storeBalances = await Finance.GetStoreBalancesAsync(); break;
+            case "settlements":
+                settlements = await Finance.GetSettlementsAsync(null, Enum.TryParse<SettlementStatus>(settlementStatus, out var st) ? st : null, settlementPage);
+                break;
+            default: cod = await Finance.GetCodRecordsAsync(null, codPage); break;
+        }
+    }
+
+    private async Task SetTab(string t) { tab = t; await ReloadAsync(); }
+    private async Task GoSettlements(int p) { settlementPage = p; await ReloadAsync(); }
+    private async Task GoCod(int p) { codPage = p; await ReloadAsync(); }
+
+    private async Task ViewAsync(int id) => detail = await Finance.GetSettlementAsync(id);
+
+    private Task Create() => RunAsync(async () =>
+    {
+        var party = creating!;
+        if (tab == "drivers") await Finance.CreateDriverSettlementAsync(party.PartyKey, note);
+        else await Finance.CreateStoreSettlementAsync(int.Parse(party.PartyKey), note);
+        creating = null;
+        note = "";
+        tab = "settlements";
+    }, "Đã lập phiếu đối soát");
+
+    private Task Confirm(string _) => RunAsync(async () => { await Finance.ConfirmSettlementAsync(confirming!.Id); confirming = null; }, "Đã xác nhận đối soát");
+    private Task Cancel(string reason) => RunAsync(async () => { await Finance.CancelSettlementAsync(cancelling!.Id, reason); cancelling = null; }, "Đã hủy phiếu");
+}

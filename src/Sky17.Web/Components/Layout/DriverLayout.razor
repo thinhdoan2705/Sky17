@@ -1,0 +1,71 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject IDriverService Drivers
+@inject RealtimeState Realtime
+@inject ToastService Toasts
+
+<div class="driver-shell">
+    <div class="driver-top">
+        <a href="/driver" class="logo" style="padding:0"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
+        <div style="display:flex;align-items:center;gap:11px">
+            @if (profile is not null)
+            {
+                <span class="small muted">@(profile.IsOnline ? "Đang hoạt động" : "Đang offline")</span>
+                <button aria-label="Bật hoặc tắt nhận đơn" class="switch @(profile.IsOnline ? "on" : "")" disabled="@(busy || profile.Status != DriverStatus.Active)" @onclick="ToggleAsync"></button>
+            }
+            <NotificationBell />
+            <UserMenu Name="@profile?.FullName" />
+        </div>
+    </div>
+    <nav class="driver-nav">
+        <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active">⌂ Tổng quan</NavLink>
+        <NavLink href="/driver/jobs" ActiveClass="active">📦 Đơn đang mở</NavLink>
+        <NavLink href="/driver/history" ActiveClass="active">▤ Lịch sử chuyến</NavLink>
+        <NavLink href="/driver/earnings" ActiveClass="active">◉ Thu nhập & COD</NavLink>
+        <NavLink href="/driver/profile" ActiveClass="active">☻ Hồ sơ</NavLink>
+    </nav>
+    @Body
+</div>
+<nav class="mobile-tabs" aria-label="Điều hướng tài xế">
+    <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active"><span>⌂</span>Tổng quan</NavLink>
+    <NavLink href="/driver/jobs" ActiveClass="active"><span>📦</span>Đơn mở</NavLink>
+    <NavLink href="/driver/history" ActiveClass="active"><span>▤</span>Lịch sử</NavLink>
+    <NavLink href="/driver/earnings" ActiveClass="active"><span>◉</span>Thu nhập</NavLink>
+    <NavLink href="/driver/profile" ActiveClass="active"><span>☻</span>Hồ sơ</NavLink>
+</nav>
+<ToastHost />
+<RealtimeListener />
+
+@code {
+    private DriverProfileDto? profile;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Realtime.Changed += OnRealtime;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { profile = await Drivers.GetProfileAsync(); } catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { profile = null; }
+    }
+
+    private Task OnRealtime(RealtimeMessage? m) => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private async Task ToggleAsync()
+    {
+        if (profile is null) return;
+        busy = true;
+        try
+        {
+            await Drivers.SetOnlineAsync(!profile.IsOnline);
+            Toasts.Success(!profile.IsOnline ? "Bạn đã bật nhận đơn" : "Bạn đã tắt nhận đơn");
+            await Realtime.RaiseAsync(null);
+        }
+        catch (DomainException ex) { Toasts.Error(ex.Message); }
+        finally { busy = false; }
+    }
+
+    public void Dispose() => Realtime.Changed -= OnRealtime;
+}
