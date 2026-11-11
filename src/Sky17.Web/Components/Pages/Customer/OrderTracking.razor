@@ -32,6 +32,13 @@ else
         <div class="stack">
             <section class="card">
                 <h2>Hành trình đơn hàng</h2>
+                @if (MapMarkers.ForOrder(order) is { Count: > 0 } markers)
+                {
+                    <div class="mb-2">
+                        <MapView Markers="markers" Route="true" Height="260px" />
+                        <p class="small muted mt-1">Quãng đường: @Fmt.Distance(order.DistanceMeters)@(order.DistanceSource == DistanceSource.Route ? " (theo đường bộ)" : "")</p>
+                    </div>
+                }
                 <OrderTimeline History="order.History" Status="order.Status" />
             </section>
             <OrderSummaryCard Order="order" />

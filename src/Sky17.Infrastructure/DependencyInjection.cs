@@ -12,8 +12,12 @@ public static class DependencyInjection
     /// <summary>
     /// Registers persistence and application services. Identity (UserManager etc.) is configured by the host.
     /// </summary>
-    public static IServiceCollection AddSky17Infrastructure(this IServiceCollection services, string connectionString, string webRootPath)
+    public static IServiceCollection AddSky17Infrastructure(this IServiceCollection services, string connectionString, string webRootPath, string? osrmBaseUrl = null)
     {
+        // Free road routing (OSRM). Without a URL, distances stay unknown and the base fee applies.
+        if (!string.IsNullOrWhiteSpace(osrmBaseUrl))
+            services.TryAddSingleton<IRoutingService>(sp => new OsrmRoutingService(osrmBaseUrl, sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<OsrmRoutingService>>()));
+        services.TryAddSingleton<IRoutingService, NullRoutingService>();
         // Factory for interactive Blazor services (short-lived context per operation)...
         services.AddDbContextFactory<AppDbContext>(o => o.UseSqlite(connectionString));
         // ...and a scoped context for ASP.NET Core Identity stores.

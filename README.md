@@ -54,7 +54,9 @@ docker compose up --build            # http://localhost:8080 (Development mode w
 ```
 For a real deployment set `ASPNETCORE_ENVIRONMENT=Production`, `Seed__DemoData=false`, and bootstrap the first admin with `Seed__AdminEmail` / `Seed__AdminPassword` (environment variables or secrets — never commit them). Data (SQLite DB + data-protection keys) is stored in the `sky17-data` volume, uploads in `sky17-uploads`. Put the container behind an HTTPS reverse proxy.
 
-Configuration keys: `ConnectionStrings:DefaultConnection`, `Seed:*`, `DataProtection:KeysPath`, `DisableHttpsRedirection`.
+Configuration keys: `ConnectionStrings:DefaultConnection`, `Seed:*`, `DataProtection:KeysPath`, `DisableHttpsRedirection`, `Maps:OsrmBaseUrl` (empty = disable distance pricing).
+
+
 
 ## Migrations
 ```bash
@@ -63,7 +65,7 @@ dotnet ef migrations add <Name> -p src/Sky17.Infrastructure -s src/Sky17.Web -o 
 Migrations are applied automatically at startup (`Database.MigrateAsync`).
 
 ## Tests
-`dotnet test` runs 50 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, concurrent driver acceptance (5 drivers race, exactly one wins), COD recording, settlement idempotency, unauthorized access, and a full 13-step end-to-end workflow.
+`dotnet test` runs 56 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, concurrent driver acceptance (5 drivers race, exactly one wins), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
 
 ## Manual end-to-end test guide
 1. **Admin login** — `/Account/Login` as `admin@sky17.local` → lands on `/admin` with live KPIs.

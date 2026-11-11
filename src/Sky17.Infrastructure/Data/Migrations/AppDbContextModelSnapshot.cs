@@ -170,6 +170,12 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
 
@@ -623,6 +629,9 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<int?>("DistanceMeters")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("DistanceSource")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("DriverEarning")
                         .HasColumnType("INTEGER");
 
@@ -631,6 +640,12 @@ namespace Sky17.Infrastructure.Data.Migrations
 
                     b.Property<int>("DriverSettlementState")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double?>("DropoffLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("DropoffLongitude")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("FailureReason")
                         .HasColumnType("TEXT");
@@ -649,6 +664,12 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<string>("PickupAddress")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("PickupLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("PickupLongitude")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("PickupPhone")
                         .IsRequired()
@@ -1051,8 +1072,14 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<bool>("IsAcceptingOrders")
                         .HasColumnType("INTEGER");
 
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("LogoUrl")
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("Name")
                         .IsRequired()

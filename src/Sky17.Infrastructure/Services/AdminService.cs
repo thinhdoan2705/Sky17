@@ -135,6 +135,7 @@ public sealed class AdminService(
         var amounts = OrderFinancials.Calculate(order.ProductTotal, DeliveryPricing.CalculateFee(rule, distanceMeters), order.DiscountAmount, rule);
         OrderFinancials.Apply(order, amounts);
         order.DistanceMeters = distanceMeters;
+        order.DistanceSource = DistanceSource.Manual;
         if (order.Payment is not null) order.Payment.Amount = order.GrandTotal;
         db.Audit(uid, "Order.DistanceOverride", nameof(Order), order.Id, $"{order.Code}: {distanceMeters}m, phí {oldFee}→{order.DeliveryFee}. {reason}");
         await db.SaveAsync(ct);

@@ -68,14 +68,10 @@ else
                 <a class="btn btn-soft btn-block mt-1" href="/driver/earnings">Lịch sử thu hộ & đối soát</a>
             </div>
             <div class="card">
-                <div class="section-title"><h2>Khu vực hoạt động</h2></div>
-                <div class="map-placeholder" style="min-height:180px">
-                    <div>
-                        <div style="font-size:44px">🗺️</div>
-                        <strong>@profile.ServiceArea</strong>
-                        <p class="small">Chưa tích hợp bản đồ trực tiếp. Dùng nút “Chỉ đường” trên từng đơn để mở Google Maps.</p>
-                    </div>
-                </div>
+                <div class="section-title"><h2>Bản đồ giao hàng</h2><span class="muted small">@profile.ServiceArea</span></div>
+                <MapView Markers="MapMarkers.ForDriver(active, available)" ShowMyLocation="true" Height="320px"
+                         EmptyText="Chưa có đơn nào có vị trí trên bản đồ." />
+                <p class="small muted mt-1">🏪 điểm lấy hàng · 🏠 điểm giao của bạn · 📦 đơn đang mở</p>
             </div>
         </aside>
     </div>

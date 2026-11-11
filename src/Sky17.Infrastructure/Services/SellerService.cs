@@ -75,6 +75,7 @@ public sealed class SellerService(
         {
             Name = s.Name, Description = s.Description, Tagline = s.Tagline, PhoneNumber = s.PhoneNumber, Address = s.Address,
             Emoji = s.Emoji, OpenTime = s.OpenTime, CloseTime = s.CloseTime, IsAcceptingOrders = s.IsAcceptingOrders,
+            Latitude = s.Latitude, Longitude = s.Longitude,
         };
     }
 
@@ -93,6 +94,9 @@ public sealed class SellerService(
         s.OpenTime = input.OpenTime;
         s.CloseTime = input.CloseTime;
         s.IsAcceptingOrders = input.IsAcceptingOrders;
+        var point = GeoPoint.From(input.Latitude, input.Longitude);
+        s.Latitude = point?.Latitude;
+        s.Longitude = point?.Longitude;
         db.Audit(uid, "Store.ProfileUpdated", nameof(Store), storeId);
         await db.SaveAsync(ct);
     }

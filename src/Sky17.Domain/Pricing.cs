@@ -12,6 +12,19 @@ public static class Money
     }
 }
 
+/// <summary>WGS84 coordinate.</summary>
+public readonly record struct GeoPoint(double Latitude, double Longitude)
+{
+    public bool IsValid => Latitude is >= -90 and <= 90 && Longitude is >= -180 and <= 180 && !(Latitude == 0 && Longitude == 0);
+
+    public static GeoPoint? From(double? lat, double? lng)
+    {
+        if (lat is null || lng is null) return null;
+        var p = new GeoPoint(lat.Value, lng.Value);
+        return p.IsValid ? p : throw new DomainException("Tọa độ bản đồ không hợp lệ.");
+    }
+}
+
 public static class DeliveryPricing
 {
     /// <summary>

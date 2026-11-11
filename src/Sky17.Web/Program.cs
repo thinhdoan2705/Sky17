@@ -55,7 +55,8 @@ if (Path.GetDirectoryName(Path.GetFullPath(dbPath)) is { } dbDir) Directory.Crea
 // Realtime publisher must be registered before infrastructure (which falls back to a no-op publisher).
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRealtimePublisher, SignalRRealtimePublisher>();
-builder.Services.AddSky17Infrastructure(connectionString, builder.Environment.WebRootPath);
+// Free road routing for delivery pricing (OSRM). Empty value disables distance-based pricing.
+builder.Services.AddSky17Infrastructure(connectionString, builder.Environment.WebRootPath, builder.Configuration["Maps:OsrmBaseUrl"]);
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

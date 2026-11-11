@@ -78,7 +78,14 @@ internal static class OrderQueries
                 .Select(h => new OrderHistoryDto(h.PreviousStatus, h.NewStatus, h.ChangedByUserId is null ? "Hệ thống" : names.GetValueOrDefault(h.ChangedByUserId), h.ChangedAtUtc, h.Reason)).ToList(),
             o.Assignments.OrderByDescending(a => a.AssignedAtUtc)
                 .Select(a => new AssignmentDto(a.Id, a.DriverId, names.GetValueOrDefault(a.DriverId, "—"), a.Status, a.IsActive, a.AssignedByUserId is null, a.AssignedAtUtc, a.CompletedAtUtc, a.Note)).ToList(),
-            OrderStateMachine.NextStatuses(o.Status, viewer));
+            OrderStateMachine.NextStatuses(o.Status, viewer))
+        {
+            PickupLatitude = o.PickupLatitude,
+            PickupLongitude = o.PickupLongitude,
+            DropoffLatitude = o.DropoffLatitude,
+            DropoffLongitude = o.DropoffLongitude,
+            DistanceSource = o.DistanceSource,
+        };
     }
 
     public static async Task<List<DailyPoint>> DailyAsync(IQueryable<Order> orders, int days, Func<Order, long> amount, DateTime nowUtc, CancellationToken ct)

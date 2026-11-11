@@ -26,8 +26,24 @@
                             <div class="field"><label>Giờ đóng cửa</label><input type="time" @bind="input.CloseTime" /><span class="hint">Giờ mở = giờ đóng nghĩa là mở 24/7.</span></div>
                         </div>
                         <label class="check"><InputCheckbox @bind-Value="input.IsAcceptingOrders" /> Đang nhận đơn (bỏ chọn để tạm nghỉ)</label>
-                        @if (IsOwner) { <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu thông tin</button></div> }
                     </fieldset>
+                    <div class="mt-2">
+                        @if (IsOwner)
+                        {
+                            <LocationPicker Label="Vị trí lấy hàng trên bản đồ" Latitude="input.Latitude" Longitude="input.Longitude"
+                                            SearchText="@input.Address" OnChanged="SetLocation" />
+                            @if (input.Latitude is null)
+                            {
+                                <div class="alert alert-warning small mt-1">Chưa ghim vị trí: phí giao sẽ tính theo mức cơ bản thay vì theo quãng đường thực tế.</div>
+                            }
+                        }
+                        else if (input.Latitude is { } lat && input.Longitude is { } lng)
+                        {
+                            <label class="small muted strong">Vị trí cửa hàng</label>
+                            <MapView Markers="@([new(lat, lng, input.Name, "store")])" Height="220px" />
+                        }
+                    </div>
+                    @if (IsOwner) { <div class="form-actions"><button class="btn" type="submit" disabled="@Busy">Lưu thông tin</button></div> }
                 </EditForm>
             </section>
             <section class="card">
@@ -72,6 +88,12 @@
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;
+
+    private void SetLocation((double? Lat, double? Lng) p)
+    {
+        input!.Latitude = p.Lat;
+        input.Longitude = p.Lng;
+    }
 
     private Task Save() => RunAsync(async () =>
     {

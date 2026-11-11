@@ -37,6 +37,8 @@ public sealed class TestApp : IAsyncDisposable
         var cs = $"Data Source={Path.Combine(dir, "test.db")};Default Timeout=30";
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<FakeRoutingService>();
+        services.AddSingleton<IRoutingService>(sp => sp.GetRequiredService<FakeRoutingService>());
         services.AddSky17Infrastructure(cs, Path.Combine(dir, "wwwroot"));
         services.AddIdentityCore<ApplicationUser>(o =>
             {
@@ -87,7 +89,7 @@ public sealed class TestApp : IAsyncDisposable
     {
         var owner = await CreateUserAsync(name + " Owner", Roles.Seller);
         await using var db = Db();
-        var store = new Store { Name = name, Address = "1 Test St", PhoneNumber = "0911111111", Status = StoreStatus.Active, OpenTime = new(0, 0), CloseTime = new(0, 0) };
+        var store = new Store { Name = name, Address = "1 Test St", PhoneNumber = "0911111111", Status = StoreStatus.Active, OpenTime = new(0, 0), CloseTime = new(0, 0), Latitude = 10.9804, Longitude = 106.6531 };
         store.Members.Add(new StoreMember { UserId = owner.Id, Role = StoreMemberRole.Owner });
         var a = new Product { Name = "Cà phê sữa đá", Price = priceA, Stock = stock };
         var b = new Product { Name = "Bánh mì", Price = priceB, Stock = stock };
@@ -151,4 +153,17 @@ public sealed class AsUser(IServiceScope scope) : IDisposable
 {
     public T Get<T>() where T : notnull => scope.ServiceProvider.GetRequiredService<T>();
     public void Dispose() => scope.Dispose();
+}
+
+/// <summary>Deterministic routing for tests (no network). Null distance simulates an unavailable service.</summary>
+public sealed class FakeRoutingService : IRoutingService
+{
+    public int? DistanceMeters { get; set; } = 5_000;
+    public int Calls { get; private set; }
+
+    public Task<int?> GetRoadDistanceMetersAsync(GeoPoint from, GeoPoint to, CancellationToken ct = default)
+    {
+        Calls++;
+        return Task.FromResult(DistanceMeters);
+    }
 }

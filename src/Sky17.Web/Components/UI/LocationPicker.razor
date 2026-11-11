@@ -1,0 +1,142 @@
+@* Pick a point: search an address (Nominatim), use GPS, or click/drag the pin on the map. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="field">
+    <label>@Label</label>
+    <div class="input-inline">
+        <input placeholder="Nhập địa chỉ để tìm trên bản đồ..." @bind="query" @onkeydown="OnKey" aria-label="Tìm địa chỉ trên bản đồ" />
+        <button type="button" class="btn btn-soft" disabled="@searching" @onclick="SearchAsync">@(searching ? "Đang tìm..." : "Tìm")</button>
+    </div>
+    @if (results.Count > 0)
+    {
+        <div class="geo-results">
+            @foreach (var r in results)
+            {
+                <button type="button" class="dd-item" @onclick="() => ChooseAsync(r)">📍 @r.Label</button>
+            }
+        </div>
+    }
+    else if (searched && !searching)
+    {
+        <span class="hint">Không tìm thấy địa chỉ phù hợp. Hãy chạm vào bản đồ để ghim vị trí.</span>
+    }
+</div>
+<div @ref="el" class="sky-map" style="height:@Height"></div>
+<div class="sky-map-tools">
+    <button type="button" class="btn btn-soft btn-sm" @onclick="LocateAsync">🎯 Dùng vị trí hiện tại</button>
+    @if (Latitude is not null)
+    {
+        <span class="small muted grow">Đã ghim: @Latitude?.ToString("0.00000"), @Longitude?.ToString("0.00000")</span>
+        <button type="button" class="btn btn-ghost btn-sm" @onclick="ClearAsync">Bỏ ghim</button>
+    }
+    else
+    {
+        <span class="small muted grow">Chạm vào bản đồ để ghim vị trí chính xác.</span>
+    }
+</div>
+
+@code {
+    public sealed record GeoResult(double Lat, double Lng, string Label);
+
+    [Parameter] public double? Latitude { get; set; }
+    [Parameter] public double? Longitude { get; set; }
+    [Parameter] public EventCallback<(double? Lat, double? Lng)> OnChanged { get; set; }
+    [Parameter] public string? SearchText { get; set; }
+    [Parameter] public string Label { get; set; } = "Vị trí trên bản đồ";
+    [Parameter] public string Height { get; set; } = "260px";
+
+    private ElementReference el;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<LocationPicker>? self;
+    private string query = "";
+    private bool searching, searched;
+    private List<GeoResult> results = [];
+    private (double?, double?) shown;
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrEmpty(query) && !string.IsNullOrWhiteSpace(SearchText)) query = SearchText;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/map.js");
+                self = DotNetObjectReference.Create(this);
+                await module.InvokeVoidAsync("picker", el, self, Latitude, Longitude);
+                shown = (Latitude, Longitude);
+            }
+            else if (module is not null && shown != (Latitude, Longitude))
+            {
+                // Parent changed the point (e.g. another saved address selected).
+                shown = (Latitude, Longitude);
+                await module.InvokeVoidAsync("setPoint", el, Latitude, Longitude);
+            }
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public async Task OnPicked(double lat, double lng)
+    {
+        shown = (lat, lng);
+        await OnChanged.InvokeAsync((Math.Round(lat, 6), Math.Round(lng, 6)));
+        StateHasChanged();
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        if (module is null || searching) return;
+        searching = true;
+        try { results = (await module.InvokeAsync<GeoResult[]>("search", query)).ToList(); }
+        catch (JSException) { results = []; }
+        finally { searching = false; searched = true; }
+    }
+
+    private async Task ChooseAsync(GeoResult r)
+    {
+        results = [];
+        searched = false;
+        if (module is not null) await module.InvokeVoidAsync("setPoint", el, r.Lat, r.Lng);
+        await OnPicked(r.Lat, r.Lng);
+    }
+
+    private async Task LocateAsync()
+    {
+        if (module is null) return;
+        var pos = await module.InvokeAsync<GeoResult?>("locate");
+        if (pos is null) { searched = true; return; }
+        await module.InvokeVoidAsync("setPoint", el, pos.Lat, pos.Lng);
+        await OnPicked(pos.Lat, pos.Lng);
+    }
+
+    private async Task ClearAsync()
+    {
+        shown = (null, null);
+        if (module is not null) await module.InvokeVoidAsync("setPoint", el, null, null);
+        await OnChanged.InvokeAsync((null, null));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("dispose", el);
+                await module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        self?.Dispose();
+    }
+}

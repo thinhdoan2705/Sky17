@@ -84,3 +84,16 @@ public sealed class NullRealtimePublisher : IRealtimePublisher
 }
 
 public sealed record DailyPoint(DateOnly Date, int Orders, long Amount);
+
+/// <summary>Road routing (free OSRM by default). Returns null when the distance cannot be determined.</summary>
+public interface IRoutingService
+{
+    Task<int?> GetRoadDistanceMetersAsync(GeoPoint from, GeoPoint to, CancellationToken ct = default);
+}
+
+public sealed class NullRoutingService : IRoutingService
+{
+    public Task<int?> GetRoadDistanceMetersAsync(GeoPoint from, GeoPoint to, CancellationToken ct = default) => Task.FromResult<int?>(null);
+}
+
+public sealed record DeliveryQuoteDto(int? DistanceMeters, long DeliveryFee, long Subtotal, long Total, bool StoreHasLocation);

@@ -48,7 +48,11 @@ public sealed class CatalogService(IDbContextFactory<AppDbContext> dbf, IClock c
     }
 
     internal static StoreCardDto ToCard(Store s, int productCount, TimeOnly now) =>
-        new(s.Id, s.Name, s.Emoji, s.LogoUrl, s.Tagline, s.Address, s.CanReceiveOrders(now), s.OpenTime, s.CloseTime, productCount);
+        new(s.Id, s.Name, s.Emoji, s.LogoUrl, s.Tagline, s.Address, s.CanReceiveOrders(now), s.OpenTime, s.CloseTime, productCount)
+        {
+            Latitude = s.Latitude,
+            Longitude = s.Longitude,
+        };
 
     public async Task<StoreDetailDto?> GetStoreAsync(int storeId, CancellationToken ct = default)
     {
@@ -108,7 +112,7 @@ public sealed class CatalogService(IDbContextFactory<AppDbContext> dbf, IClock c
     }
 }
 
-public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock) : ICartService
+public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, IRoutingService routing) : ICartService
 {
     private async Task<string> UserAsync(CancellationToken ct) => (await users.GetAsync(ct)).RequireRole(Roles.Customer);
 
@@ -221,10 +225,22 @@ public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUse
         await db.SaveAsync(ct);
         return await ToDtoAsync(db, null, ct);
     }
+
+    public async Task<DeliveryQuoteDto> QuoteAsync(double? latitude, double? longitude, CancellationToken ct = default)
+    {
+        var uid = await UserAsync(ct);
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var cart = await CartGraph(db).AsNoTracking().FirstOrDefaultAsync(c => c.UserId == uid, ct);
+        var rule = await Settings.GetRateRuleAsync(db, ct);
+        var subtotal = cart?.Items.Sum(i => i.Product.Price * i.Quantity) ?? 0;
+        if (cart?.Store is null) return new DeliveryQuoteDto(null, rule.BaseFee, subtotal, subtotal + rule.BaseFee, false);
+        var (meters, fee, _) = await DeliveryQuote.CalculateAsync(routing, rule, cart.Store, GeoPoint.From(latitude, longitude), ct);
+        return new DeliveryQuoteDto(meters, fee, subtotal, subtotal + fee, cart.Store.Latitude is not null);
+    }
 }
 
 public sealed class CustomerOrderService(
-    IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, OrderWorkflow workflow, Notifier notifier) : ICustomerOrderService
+    IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, OrderWorkflow workflow, Notifier notifier, IRoutingService routing) : ICustomerOrderService
 {
     public async Task<PlaceOrderResult> PlaceOrderAsync(CheckoutInput input, CancellationToken ct = default)
     {
@@ -249,6 +265,10 @@ public sealed class CustomerOrderService(
         if (!store.CanReceiveOrders(TimeOnly.FromDateTime(VnTime.ToLocal(now))))
             throw new DomainException($"{store.Name} hiện không nhận đơn (ngoài giờ mở cửa hoặc tạm nghỉ).");
         var rule = await Settings.GetRateRuleAsync(db, ct);
+
+        // Road distance (network call) is resolved before the write transaction starts.
+        var dropoff = GeoPoint.From(input.Latitude, input.Longitude);
+        var (meters, deliveryFee, distanceSource) = await DeliveryQuote.CalculateAsync(routing, rule, store, dropoff, ct);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -275,7 +295,7 @@ public sealed class CustomerOrderService(
             return new OrderItem { ProductId = p.Id, ProductName = p.Name, Emoji = p.Emoji, UnitPrice = p.Price, Quantity = i.Quantity, LineTotal = p.Price * i.Quantity };
         }).ToList();
 
-        var amounts = OrderFinancials.Calculate(items.Sum(i => i.LineTotal), DeliveryPricing.CalculateFee(rule, null), 0, rule);
+        var amounts = OrderFinancials.Calculate(items.Sum(i => i.LineTotal), deliveryFee, 0, rule);
         var order = new Order
         {
             Code = CodeGen.OrderCode(now),
@@ -289,6 +309,12 @@ public sealed class CustomerOrderService(
             PickupStoreName = store.Name,
             PickupAddress = store.Address,
             PickupPhone = store.PhoneNumber,
+            PickupLatitude = store.Latitude,
+            PickupLongitude = store.Longitude,
+            DropoffLatitude = dropoff?.Latitude,
+            DropoffLongitude = dropoff?.Longitude,
+            DistanceMeters = meters,
+            DistanceSource = distanceSource,
             IdempotencyKey = key,
             PlacedAtUtc = now,
             Items = items,
@@ -304,7 +330,7 @@ public sealed class CustomerOrderService(
         if (input.SaveAddress && !await db.Addresses.AnyAsync(a => a.UserId == uid && a.Street == order.DeliveryAddress, ct))
         {
             var hasAny = await db.Addresses.AnyAsync(a => a.UserId == uid, ct);
-            db.Addresses.Add(new Address { UserId = uid, Label = "Đã lưu", RecipientName = order.RecipientName, PhoneNumber = order.RecipientPhone, Street = order.DeliveryAddress, City = "", IsDefault = !hasAny });
+            db.Addresses.Add(new Address { UserId = uid, Label = "Đã lưu", RecipientName = order.RecipientName, PhoneNumber = order.RecipientPhone, Street = order.DeliveryAddress, City = "", IsDefault = !hasAny, Latitude = dropoff?.Latitude, Longitude = dropoff?.Longitude });
         }
 
         db.Audit(uid, "Order.Placed", nameof(Order), order.Code, $"store={store.Id} total={order.GrandTotal}");
@@ -367,7 +393,11 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         var uid = (await users.GetAsync(ct)).RequireUserId();
         await using var db = await dbf.CreateDbContextAsync(ct);
         var list = await db.Addresses.AsNoTracking().Where(a => a.UserId == uid).OrderByDescending(a => a.IsDefault).ThenBy(a => a.Id).ToListAsync(ct);
-        return list.Select(a => new AddressDto(a.Id, a.Label, a.RecipientName, a.PhoneNumber, a.FullText, a.Note, a.IsDefault)).ToList();
+        return list.Select(a => new AddressDto(a.Id, a.Label, a.RecipientName, a.PhoneNumber, a.FullText, a.Note, a.IsDefault)
+        {
+            Latitude = a.Latitude,
+            Longitude = a.Longitude,
+        }).ToList();
     }
 
     public async Task<AddressInput?> GetForEditAsync(int id, CancellationToken ct = default)
@@ -379,6 +409,7 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         {
             Id = a.Id, Label = a.Label, RecipientName = a.RecipientName, PhoneNumber = a.PhoneNumber, Street = a.Street,
             Ward = a.Ward, District = a.District, City = a.City, Note = a.Note, IsDefault = a.IsDefault,
+            Latitude = a.Latitude, Longitude = a.Longitude,
         };
     }
 
@@ -405,6 +436,9 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         a.District = input.District.Clean();
         a.City = input.City.Trim();
         a.Note = input.Note.Clean();
+        var point = GeoPoint.From(input.Latitude, input.Longitude);
+        a.Latitude = point?.Latitude;
+        a.Longitude = point?.Longitude;
         var isFirst = !await db.Addresses.AnyAsync(x => x.UserId == uid && x.Id != a.Id, ct);
         if (input.IsDefault || isFirst)
         {

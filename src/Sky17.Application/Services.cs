@@ -19,6 +19,8 @@ public interface ICartService
     Task<AddToCartResult> AddAsync(int productId, int quantity = 1, bool replaceOtherStore = false, CancellationToken ct = default);
     Task<CartDto> SetQuantityAsync(int productId, int quantity, CancellationToken ct = default);
     Task<CartDto> ClearAsync(CancellationToken ct = default);
+    /// <summary>Delivery fee preview for the current cart to the given drop-off point (road distance via routing service).</summary>
+    Task<DeliveryQuoteDto> QuoteAsync(double? latitude, double? longitude, CancellationToken ct = default);
 }
 
 public interface ICustomerOrderService

@@ -18,6 +18,11 @@ else
         <div class="alert alert-success">✅ Đã giao lúc @Fmt.Time(job.CompletedAtUtc). COD @Fmt.Vnd(job.CodAmount) đã được ghi nhận vào ví.</div>
     }
     <div class="card">
+        <div class="mb-2">
+            <MapView Markers="MapMarkers.ForJob(job)" Route="@job.IsMine" ShowMyLocation="true" Height="300px"
+                     EmptyText="Cửa hàng hoặc khách chưa ghim vị trí; dùng nút chỉ đường theo địa chỉ." />
+            @if (!job.IsMine) { <p class="small muted mt-1">Vị trí giao hàng chính xác hiển thị sau khi bạn nhận đơn.</p> }
+        </div>
         <DeliveryCard Job="job">
             <DriverJobActions Job="job" CanAccept="true" OnChanged="ReloadAsync" />
         </DeliveryCard>

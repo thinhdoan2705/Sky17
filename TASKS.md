@@ -39,7 +39,8 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 
 ## Known gaps / unfinished (deliberately not faked)
 - ⬜ **Real e-mail delivery** — reset links are only logged in Development; implement `IEmailSender<ApplicationUser>` (SMTP / provider) for production. Email confirmation is therefore off.
-- ⬜ **Map / distance service** — no geocoding or routing; base fee until an admin enters a measured distance. Map panel in the driver app is informational.
+- ✅ **Free maps** — Leaflet + OSM tiles; pin pickers for store location, saved addresses and checkout (Nominatim search, GPS, tap/drag); live fee quote from OSRM road distance; maps on order tracking, store page, driver dashboard/delivery (with “my location”) and admin order detail. Migration `AddMapCoordinates`. 6 tests (fake routing).
+- 🟡 **Map providers for scale** — uses public OSM/Nominatim/OSRM demo servers (light-use policies); self-host or switch provider before production traffic. No live driver GPS tracking for customers.
 - ⬜ **Online payments** — only COD. `PaymentMethod`/`Payment` entities are ready for more providers.
 - ⬜ **Discounts/vouchers** — `DiscountAmount` is modelled (always 0) but there is no voucher UI.
 - 🟡 **Business hours** — one daily open/close window per store (no per-weekday schedule).

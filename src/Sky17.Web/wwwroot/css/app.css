@@ -49,6 +49,9 @@ select.filter,input.filter{min-width:0}
 .dd-item.unread{background:#f4f8ff}
 .dd-item b{display:block;margin-bottom:3px}
 .user-btn{border:0;padding:0;background:none}
+/* Header actions for small screens (desktop uses .shop-nav). Not combined with .flex, which would override display:none. */
+.mobile-actions{display:none;gap:10px;align-items:center;position:relative}
+@media(max-width:800px){.mobile-actions{display:flex}}
 .menu-overlay{position:fixed;inset:0;z-index:55}
 .side-foot{cursor:default}
 .store-switch{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:700}
@@ -136,6 +139,17 @@ select.filter,input.filter{min-width:0}
 .kpi.red .kpi-icon{background:var(--red-soft);color:var(--red)}
 .chart .bar[title]{cursor:default}
 .bar-value{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted);white-space:nowrap}
+
+/* Maps (Leaflet + OpenStreetMap) */
+.sky-map{isolation:isolate;width:100%;border-radius:15px;overflow:hidden;border:1px solid var(--line);background:#eef3fb;z-index:0}
+.sky-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.sky-pin{background:none;border:0}
+.sky-pin-inner{width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:grid;place-items:center;border:3px solid #fff;box-shadow:0 4px 12px #0f244040}
+.sky-pin-inner span{transform:rotate(45deg);font-size:16px;line-height:1}
+.geo-results{border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:220px;overflow-y:auto}
+.geo-results .dd-item{display:block;width:100%;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid var(--line);background:#fff;font-size:12px}
+.geo-results .dd-item:hover{background:#f4f8ff}
+.leaflet-container{font:inherit}
 
 /* Driver */
 .driver-nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}

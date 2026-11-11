@@ -25,6 +25,17 @@ public enum OrderActor
     System,
 }
 
+/// <summary>Where an order's distance comes from. Distances are never estimated/fabricated.</summary>
+public enum DistanceSource
+{
+    /// <summary>Unknown: base delivery fee applies.</summary>
+    None = 0,
+    /// <summary>Road distance from the routing service (OSRM) between the two map points.</summary>
+    Route = 1,
+    /// <summary>Entered manually by an admin.</summary>
+    Manual = 2,
+}
+
 public enum StoreStatus
 {
     PendingApproval = 0,

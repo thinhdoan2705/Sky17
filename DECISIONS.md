@@ -42,8 +42,13 @@ Key rules: customer cancels only while `Pending`; seller rejects in `Pending/Con
 ## D7. Money
 All money is `long` VND. Commission and driver share are basis points (`PlatformFeeBps`, `DriverShareBps`) with integer half-up rounding (`Money.ApplyBps`). For each order: `GrandTotal = ProductTotal + DeliveryFee − Discount`; `StoreReceivable = ProductTotal − PlatformFee`; `DriverOwesPlatform = COD − DriverEarning`; `PlatformRevenue = PlatformFee + DeliveryFee − DriverEarning − Discount`. These always sum to the amount the customer paid (unit-tested).
 
-## D8. Delivery pricing without a map provider
-No mapping service is integrated, so distance/ETA are **not fabricated**: at checkout the base fee applies and the order shows “Khoảng cách: Chưa xác định”. Admin can set a measured distance (manual override) before pickup, which recalculates the fee and notifies the customer. Driver "navigate" buttons open Google Maps search URLs.
+## D8. Free maps & distance-based pricing
+- **Map display:** Leaflet 1.9.4 (vendored in `wwwroot/lib/leaflet`) with OpenStreetMap tiles — free, no API key. Attribution “© OpenStreetMap” is shown on every map.
+- **Address search:** Nominatim (OSM), called from the browser only when the user presses “Tìm” (respects the ≤1 req/s policy, no autocomplete). Street-level Vietnamese addresses are sometimes missing in OSM, so users can always tap/drag the pin or use GPS (“Dùng vị trí hiện tại”).
+- **Distance:** OSRM road distance between the store pin and the drop-off pin (`Maps:OsrmBaseUrl`, default public demo `https://router.project-osrm.org`). Computed server-side at quote and checkout; the client never sends a distance or fee.
+- **No fabrication:** if either pin is missing or OSRM fails, the distance stays null, `DistanceSource = None`, and the base fee applies. Admin can still override the distance manually (`DistanceSource = Manual`).
+- **Privacy:** store pickup pins are public; a customer's drop-off pin is only returned to that customer, the store, admin and the *assigned* driver (open jobs show pickup only).
+- **Production note:** public OSM tile, Nominatim and OSRM demo servers are for light use. For real traffic, self-host OSRM/Nominatim or use a commercial tile/geocoding provider and change the URLs (`Maps:OsrmBaseUrl`, `wwwroot/js/map.js`).
 
 ## D9. Single-store cart
 A cart belongs to one store. Adding a product from another store asks the customer to clear the cart first.

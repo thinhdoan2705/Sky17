@@ -58,6 +58,8 @@ else
                     <label for="rnote">Ghi chú cho tài xế / cửa hàng</label>
                     <InputTextArea id="rnote" rows="2" @bind-Value="input.DeliveryNote" placeholder="Ví dụ: gọi trước khi đến, ít đá..." />
                 </div>
+                <LocationPicker Label="📍 Ghim điểm giao trên bản đồ" Latitude="input.Latitude" Longitude="input.Longitude"
+                                SearchText="@input.DeliveryAddress" OnChanged="SetDropoff" />
                 @if (selectedAddress == 0)
                 {
                     <label class="check"><InputCheckbox @bind-Value="input.SaveAddress" /> Lưu địa chỉ này vào sổ địa chỉ</label>
@@ -72,8 +74,23 @@ else
                 }
                 @foreach (var w in cart.Warnings) { <div class="alert alert-warning small">@w</div> }
                 <div class="order-line mt-2"><span class="muted">Tạm tính</span><strong>@Fmt.Vnd(cart.Subtotal)</strong></div>
-                <div class="order-line"><span class="muted">Phí giao hàng</span><strong>@Fmt.Vnd(cart.DeliveryFee)</strong></div>
-                <div class="order-line total"><span>Tổng thanh toán</span><span class="primary-text">@Fmt.Vnd(cart.Total)</span></div>
+                <div class="order-line">
+                    <span class="muted">Phí giao hàng @(quote?.DistanceMeters is { } m ? $"({Fmt.Distance(m)})" : "(cơ bản)")</span>
+                    <strong>@(quoting ? "…" : Fmt.Vnd(quote?.DeliveryFee ?? cart.DeliveryFee))</strong>
+                </div>
+                <div class="order-line total"><span>Tổng thanh toán</span><span class="primary-text">@Fmt.Vnd(cart.Subtotal + (quote?.DeliveryFee ?? cart.DeliveryFee))</span></div>
+                @if (quote is { StoreHasLocation: false })
+                {
+                    <p class="small muted">Cửa hàng chưa ghim vị trí nên áp dụng phí giao cơ bản.</p>
+                }
+                else if (input.Latitude is null)
+                {
+                    <p class="small muted">Ghim điểm giao trên bản đồ để tính phí theo quãng đường thực tế; nếu không, áp dụng phí cơ bản.</p>
+                }
+                else if (quote is { DistanceMeters: null } && !quoting)
+                {
+                    <p class="small muted">Không tính được quãng đường lúc này, tạm áp dụng phí cơ bản.</p>
+                }
                 <div class="sticky-action">
                     <button type="submit" class="btn btn-block" disabled="@(Busy || !cart.CanCheckout)">
                         @if (Busy) { <span class="spinner"></span> }
@@ -93,6 +110,24 @@ else
     // One idempotency key per checkout page visit: double-clicks or retries never create two orders.
     private readonly CheckoutInput input = new() { IdempotencyKey = Guid.NewGuid() };
     private bool initialized;
+    private DeliveryQuoteDto? quote;
+    private bool quoting;
+
+    private async Task RefreshQuoteAsync()
+    {
+        quoting = true;
+        StateHasChanged();
+        try { quote = await CartService.QuoteAsync(input.Latitude, input.Longitude); }
+        catch (Exception ex) when (IsUserError(ex)) { quote = null; }
+        finally { quoting = false; }
+    }
+
+    private async Task SetDropoff((double? Lat, double? Lng) p)
+    {
+        input.Latitude = p.Lat;
+        input.Longitude = p.Lng;
+        await RefreshQuoteAsync();
+    }
 
     protected override async Task LoadAsync()
     {
@@ -100,19 +135,20 @@ else
         addresses = await Addresses.GetMineAsync();
         if (initialized) return;
         initialized = true;
-        if ((addresses.FirstOrDefault(x => x.IsDefault) ?? addresses.FirstOrDefault()) is { } a) UseAddress(a);
+        if ((addresses.FirstOrDefault(x => x.IsDefault) ?? addresses.FirstOrDefault()) is { } a) await UseAddress(a);
         else
         {
             var me = await Profiles.GetMineAsync();
             input.RecipientName = me.FullName;
             input.RecipientPhone = me.PhoneNumber ?? "";
             input.SaveAddress = true;
+            await RefreshQuoteAsync();
         }
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
 
-    private void UseAddress(AddressDto a)
+    private async Task UseAddress(AddressDto a)
     {
         selectedAddress = a.Id;
         input.RecipientName = a.RecipientName;
@@ -120,13 +156,18 @@ else
         input.DeliveryAddress = a.FullText;
         if (string.IsNullOrEmpty(input.DeliveryNote)) input.DeliveryNote = a.Note;
         input.SaveAddress = false;
+        input.Latitude = a.Latitude;
+        input.Longitude = a.Longitude;
+        await RefreshQuoteAsync();
     }
 
-    private void UseNew()
+    private async Task UseNew()
     {
         selectedAddress = 0;
         input.DeliveryAddress = "";
         input.SaveAddress = true;
+        input.Latitude = input.Longitude = null;
+        await RefreshQuoteAsync();
     }
 
     private Task PlaceAsync() => RunAsync(async () =>

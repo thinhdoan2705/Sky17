@@ -66,6 +66,8 @@ public sealed class StoreProfileInput
     public TimeOnly OpenTime { get; set; } = new(7, 0);
     public TimeOnly CloseTime { get; set; } = new(22, 0);
     public bool IsAcceptingOrders { get; set; } = true;
+    [Range(-90, 90)] public double? Latitude { get; set; }
+    [Range(-180, 180)] public double? Longitude { get; set; }
 }
 
 public sealed record StoreMemberDto(int Id, string UserId, string FullName, string Email, StoreMemberRole Role);
@@ -104,7 +106,14 @@ public sealed record DeliveryJobDto(
     int OrderId, string Code, OrderStatus Status, string StoreName, string PickupAddress, string PickupPhone,
     string RecipientName, string? CustomerPhone, string DropoffAddress, string? DeliveryNote,
     long DeliveryFee, long DriverEarning, long CodAmount, int? DistanceMeters, int ItemCount,
-    DateTime PlacedAtUtc, DateTime? CompletedAtUtc, bool IsMine, string? FailureReason);
+    DateTime PlacedAtUtc, DateTime? CompletedAtUtc, bool IsMine, string? FailureReason)
+{
+    public double? PickupLatitude { get; init; }
+    public double? PickupLongitude { get; init; }
+    /// <summary>Only revealed to the assigned driver (null for open jobs).</summary>
+    public double? DropoffLatitude { get; init; }
+    public double? DropoffLongitude { get; init; }
+}
 
 public sealed record DriverDashboardDto(
     DriverStatus Status, bool IsOnline, long EarningToday, int ActiveCount, int CompletedToday,

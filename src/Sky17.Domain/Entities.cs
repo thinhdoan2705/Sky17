@@ -23,6 +23,9 @@ public class Address : AuditableEntity
     public string City { get; set; } = "Bình Dương";
     public string? Note { get; set; }
     public bool IsDefault { get; set; }
+    /// <summary>WGS84 coordinates picked on the map (optional).</summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 
     public string FullText => string.Join(", ", new[] { Street, Ward, District, City }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
@@ -39,6 +42,9 @@ public class Store : AuditableEntity, IVersioned
     public required string Address { get; set; }
     public string Emoji { get; set; } = "🏪";
     public string? LogoUrl { get; set; }
+    /// <summary>Pickup location (WGS84). Required for distance-based pricing.</summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public StoreStatus Status { get; set; } = StoreStatus.PendingApproval;
     public string? StatusReason { get; set; }
     /// <summary>Manual open/closed switch ("tạm nghỉ").</summary>
@@ -153,6 +159,13 @@ public class Order : AuditableEntity, IVersioned
     public required string PickupStoreName { get; set; }
     public required string PickupAddress { get; set; }
     public required string PickupPhone { get; set; }
+
+    // Coordinate snapshots (null when unknown)
+    public double? PickupLatitude { get; set; }
+    public double? PickupLongitude { get; set; }
+    public double? DropoffLatitude { get; set; }
+    public double? DropoffLongitude { get; set; }
+    public DistanceSource DistanceSource { get; set; }
 
     /// <summary>Distance in meters, only when known (set manually by admin). Null = not measured.</summary>
     public int? DistanceMeters { get; set; }

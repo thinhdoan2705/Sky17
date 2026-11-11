@@ -19,7 +19,14 @@ public sealed class DriverService(
         mine ? customerPhone : null,
         o.DeliveryAddress, mine ? o.DeliveryNote : null,
         o.DeliveryFee, o.DriverEarning, o.GrandTotal, o.DistanceMeters, o.Items.Sum(i => i.Quantity),
-        o.PlacedAtUtc, o.DeliveredAtUtc, mine, o.FailureReason);
+        o.PlacedAtUtc, o.DeliveredAtUtc, mine, o.FailureReason)
+    {
+        PickupLatitude = o.PickupLatitude,
+        PickupLongitude = o.PickupLongitude,
+        // The exact drop-off point is personal data: only the assigned driver gets it.
+        DropoffLatitude = mine ? o.DropoffLatitude : null,
+        DropoffLongitude = mine ? o.DropoffLongitude : null,
+    };
 
     public async Task<DriverProfileDto> GetProfileAsync(CancellationToken ct = default)
     {

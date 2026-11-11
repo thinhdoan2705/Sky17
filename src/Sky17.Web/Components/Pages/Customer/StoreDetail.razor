@@ -26,6 +26,13 @@ else
         <div class="alert alert-warning">Cửa hàng đang đóng cửa hoặc tạm nghỉ, bạn có thể xem thực đơn nhưng chưa thể đặt đơn.</div>
     }
     @if (!string.IsNullOrEmpty(store.Description)) { <p class="muted">@store.Description</p> }
+    @if (store.Store.Latitude is { } slat && store.Store.Longitude is { } slng)
+    {
+        <details class="card mb-2" style="padding:14px">
+            <summary class="strong" style="cursor:pointer">🗺️ Xem vị trí cửa hàng trên bản đồ</summary>
+            <div class="mt-1"><MapView Markers="@([new(slat, slng, store.Store.Name, "store")])" Height="240px" /></div>
+        </details>
+    }
 
     <div class="tabs">
         <button class="@(category is null ? "active" : "")" @onclick="() => category = null">Tất cả</button>

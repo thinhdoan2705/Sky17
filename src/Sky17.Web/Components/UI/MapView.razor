@@ -1,0 +1,74 @@
+@* Read-only OpenStreetMap with markers; optional road route between the first two markers. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="sky-map-wrap">
+    @if (Markers.Count == 0 && !ShowMyLocation)
+    {
+        <div class="map-placeholder" style="min-height:@Height">
+            <div><div style="font-size:40px">🗺️</div><strong>Chưa có vị trí trên bản đồ</strong><p class="small">@EmptyText</p></div>
+        </div>
+    }
+    else
+    {
+        <div @ref="el" class="sky-map" style="height:@Height" role="img" aria-label="Bản đồ"></div>
+        <div class="sky-map-tools">
+            @if (ShowMyLocation) { <button type="button" class="btn btn-soft btn-sm" @onclick="LocateAsync">📍 Vị trí của tôi</button> }
+            @if (Route && Markers.Count >= 2)
+            {
+                <a class="btn btn-outline btn-sm" target="_blank" rel="noopener"
+                   href="@($"https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route={Coord(Markers[0])}%3B{Coord(Markers[1])}")">↗ Mở chỉ đường</a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    public sealed record MapMarker(double Lat, double Lng, string Label, string Kind);
+
+    [Parameter] public IReadOnlyList<MapMarker> Markers { get; set; } = [];
+    [Parameter] public bool Route { get; set; }
+    [Parameter] public bool ShowMyLocation { get; set; }
+    [Parameter] public string Height { get; set; } = "300px";
+    [Parameter] public string EmptyText { get; set; } = "Vị trí sẽ hiển thị khi đã được ghim.";
+
+    private ElementReference el;
+    private IJSObjectReference? module;
+    private string? renderedKey;
+
+    private static string Coord(MapMarker m) =>
+        $"{m.Lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}%2C{m.Lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Markers.Count == 0 && !ShowMyLocation) return;
+        var key = string.Join("|", Markers.Select(m => $"{m.Lat},{m.Lng},{m.Kind}")) + Route;
+        if (key == renderedKey) return;
+        renderedKey = key;
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/map.js");
+            await module.InvokeVoidAsync("render", el, new { markers = Markers, route = Route });
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task LocateAsync()
+    {
+        if (module is null) return;
+        try { await module.InvokeAsync<object?>("showMe", el); } catch (JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("dispose", el);
+                await module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

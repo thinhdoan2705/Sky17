@@ -9,7 +9,11 @@ public sealed record CategoryDto(int Id, string Name, string Emoji, int? StoreId
 
 public sealed record StoreCardDto(
     int Id, string Name, string Emoji, string? LogoUrl, string? Tagline, string Address,
-    bool IsOpenNow, TimeOnly OpenTime, TimeOnly CloseTime, int ProductCount);
+    bool IsOpenNow, TimeOnly OpenTime, TimeOnly CloseTime, int ProductCount)
+{
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+}
 
 public sealed record ProductCardDto(
     int Id, int StoreId, string StoreName, string Name, string Emoji, string? ImageUrl,
@@ -61,6 +65,10 @@ public sealed class CheckoutInput
 
     /// <summary>Client-generated key per checkout attempt; the same key never creates two orders.</summary>
     public Guid IdempotencyKey { get; set; } = Guid.NewGuid();
+
+    /// <summary>Drop-off point picked on the map. When present (and the store has a location) the fee uses road distance.</summary>
+    [Range(-90, 90)] public double? Latitude { get; set; }
+    [Range(-180, 180)] public double? Longitude { get; set; }
 }
 
 public sealed record PlaceOrderResult(int OrderId, string Code, bool WasDuplicate);
@@ -88,7 +96,14 @@ public sealed record OrderDetailDto(
     string? DriverId, string? DriverName, string? DriverPhone, string? DriverPlate,
     string? CancelReason, string? FailureReason, DateTime PlacedAtUtc, DateTime? DeliveredAtUtc,
     IReadOnlyList<OrderItemDto> Items, IReadOnlyList<OrderHistoryDto> History, IReadOnlyList<AssignmentDto> Assignments,
-    IReadOnlyList<OrderStatus> AllowedNextStatuses);
+    IReadOnlyList<OrderStatus> AllowedNextStatuses)
+{
+    public double? PickupLatitude { get; init; }
+    public double? PickupLongitude { get; init; }
+    public double? DropoffLatitude { get; init; }
+    public double? DropoffLongitude { get; init; }
+    public DistanceSource DistanceSource { get; init; }
+}
 
 public sealed class OrderFilter
 {
@@ -130,9 +145,15 @@ public sealed class AddressInput
 
     [StringLength(200)] public string? Note { get; set; }
     public bool IsDefault { get; set; }
+    [Range(-90, 90)] public double? Latitude { get; set; }
+    [Range(-180, 180)] public double? Longitude { get; set; }
 }
 
-public sealed record AddressDto(int Id, string Label, string RecipientName, string PhoneNumber, string FullText, string? Note, bool IsDefault);
+public sealed record AddressDto(int Id, string Label, string RecipientName, string PhoneNumber, string FullText, string? Note, bool IsDefault)
+{
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+}
 
 public sealed class ProfileInput
 {

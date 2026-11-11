@@ -67,6 +67,11 @@ else
                 <div class="row-item"><span class="grow muted">Tài xế hiện tại</span><span>@(o.DriverName is null ? "—" : $"{o.DriverName} · {o.DriverPlate} · {o.DriverPhone}")</span></div>
             </section>
             <section class="card">
+                <h2>Bản đồ</h2>
+                <MapView Markers="MapMarkers.ForOrder(o)" Route="true" Height="260px" EmptyText="Cửa hàng hoặc khách chưa ghim vị trí." />
+                <p class="small muted mt-1">Quãng đường: @Fmt.Distance(o.DistanceMeters) · nguồn: @(o.DistanceSource switch { DistanceSource.Route => "định tuyến OSRM", DistanceSource.Manual => "admin nhập tay", _ => "chưa xác định" })</p>
+            </section>
+            <section class="card">
                 <h2>Dòng thời gian</h2>
                 <OrderTimeline History="o.History" Status="o.Status" />
             </section>
