@@ -115,6 +115,8 @@ public sealed record DeliveryJobDto(
 {
     public double? PickupLatitude { get; init; }
     public double? PickupLongitude { get; init; }
+    /// <summary>Building / floor / alley / landmark (assigned driver only).</summary>
+    public string? DropoffDetail { get; init; }
     /// <summary>Only revealed to the assigned driver (null for open jobs).</summary>
     public double? DropoffLatitude { get; init; }
     public double? DropoffLongitude { get; init; }

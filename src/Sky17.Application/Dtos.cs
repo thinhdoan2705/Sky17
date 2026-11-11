@@ -54,10 +54,22 @@ public sealed class CheckoutInput
     [VnPhone]
     public string RecipientPhone { get; set; } = "";
 
-    [Required(ErrorMessage = "Vui lòng nhập địa chỉ nhận hàng")]
-    [StringLength(300, MinimumLength = 5, ErrorMessage = "Địa chỉ quá ngắn")]
-    public string DeliveryAddress { get; set; } = "";
+    /// <summary>House number and street name.</summary>
+    [Required(ErrorMessage = "Vui lòng nhập số nhà, tên đường")]
+    [StringLength(200, MinimumLength = 2, ErrorMessage = "Số nhà, tên đường quá ngắn")]
+    public string Street { get; set; } = "";
 
+    [Required(ErrorMessage = "Vui lòng chọn tỉnh/thành phố")]
+    public string? ProvinceCode { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn phường/xã")]
+    public string? WardCode { get; set; }
+
+    /// <summary>Address details for the driver: building, floor, apartment, alley, landmark.</summary>
+    [StringLength(200)]
+    public string? AddressDetail { get; set; }
+
+    /// <summary>Note for the store / driver about the order (e.g. call first, less ice).</summary>
     [StringLength(300)]
     public string? DeliveryNote { get; set; }
 
@@ -110,6 +122,8 @@ public sealed record OrderDetailDto(
     public DateTime? FoodReadyAtUtc { get; init; }
     public DateTime? DispatchStartedAtUtc { get; init; }
     /// <summary>Live driver position (only while a driver works on the order).</summary>
+    /// <summary>Building / floor / alley / landmark entered by the customer.</summary>
+    public string? DeliveryAddressDetail { get; init; }
     public double? DriverLatitude { get; init; }
     public double? DriverLongitude { get; init; }
     public DateTime? DriverLocationAtUtc { get; init; }
@@ -150,12 +164,13 @@ public sealed class AddressInput
     [Required(ErrorMessage = "Nhập số nhà, tên đường"), StringLength(200)]
     public string Street { get; set; } = "";
 
-    [StringLength(100)] public string? Ward { get; set; }
-    [StringLength(100)] public string? District { get; set; }
+    [Required(ErrorMessage = "Chọn tỉnh/thành phố")]
+    public string? ProvinceCode { get; set; }
 
-    [Required(ErrorMessage = "Nhập tỉnh/thành phố"), StringLength(100)]
-    public string City { get; set; } = "Bình Dương";
+    [Required(ErrorMessage = "Chọn phường/xã")]
+    public string? WardCode { get; set; }
 
+    /// <summary>Address details: building, floor, apartment, alley, landmark.</summary>
     [StringLength(200)] public string? Note { get; set; }
     public bool IsDefault { get; set; }
     [Range(-90, 90)] public double? Latitude { get; set; }
@@ -164,6 +179,11 @@ public sealed class AddressInput
 
 public sealed record AddressDto(int Id, string Label, string RecipientName, string PhoneNumber, string FullText, string? Note, bool IsDefault)
 {
+    public string Street { get; init; } = "";
+    public string? ProvinceCode { get; init; }
+    public string? WardCode { get; init; }
+    /// <summary>False for addresses saved before the province/ward catalog (must be re-selected).</summary>
+    public bool HasAdministrativeUnit => ProvinceCode is not null && WardCode is not null;
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
 }

@@ -41,6 +41,8 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 ## Known gaps / unfinished (deliberately not faked)
 - ✅ **Customer login by phone number** (normalized VN number as login name, unique; partners keep e-mail login; existing customer accounts converted at startup). 11 tests.
 - ✅ **Separate login pages** `/login`, `/seller/login`, `/driver/login`, `/admin/login` (role-checked per portal, `/Account/Login` forwards by return URL, partner logout returns to its login page).
+- ✅ **Structured addresses** — Số nhà/đường + Phường/Xã + Tỉnh/Thành (34 provinces, 3,321 wards, 2025 catalog v5.2.0) + optional “Chi tiết địa chỉ”; province→ward picker with accent-insensitive filter in the address book and checkout; server validates the ward belongs to the province and composes the address. Migration `StructuredAddress`. 7 tests.
+- ⬜ **Store addresses** — still a single free-text field (registration and store profile); could reuse `AdminUnitPicker`.
 - ⬜ **SMS / OTP** — phone numbers are not verified by OTP and password reset still goes through e-mail; needs an SMS provider.
 - ⬜ **Real e-mail delivery** — reset links are only logged in Development; implement `IEmailSender<ApplicationUser>` (SMTP / provider) for production. Email confirmation is therefore off.
 - ✅ **Free maps** — Leaflet + OSM tiles; pin pickers for store location, saved addresses and checkout (Nominatim search, GPS, tap/drag); live fee quote from OSRM road distance; maps on order tracking, store page, driver dashboard/delivery (with “my location”) and admin order detail. Migration `AddMapCoordinates`. 6 tests (fake routing).

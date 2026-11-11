@@ -240,7 +240,7 @@ public sealed class CartService(IDbContextFactory<AppDbContext> dbf, ICurrentUse
 }
 
 public sealed class CustomerOrderService(
-    IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, OrderWorkflow workflow, Notifier notifier, IRoutingService routing) : ICustomerOrderService
+    IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, OrderWorkflow workflow, Notifier notifier, IRoutingService routing, IAdministrativeUnits units) : ICustomerOrderService
 {
     public async Task<PlaceOrderResult> PlaceOrderAsync(CheckoutInput input, CancellationToken ct = default)
     {
@@ -248,6 +248,9 @@ public sealed class CustomerOrderService(
         InputValidation.Validate(input);
         if (input.IdempotencyKey == Guid.Empty) throw new DomainException("Yêu cầu đặt hàng không hợp lệ.");
         var key = input.IdempotencyKey.ToString("N");
+        // Ward must belong to the province (national catalog); the address text is composed server-side.
+        var (province, ward) = units.Resolve(input.ProvinceCode, input.WardCode);
+        var street = input.Street.Trim();
 
         await using var db = await dbf.CreateDbContextAsync(ct);
 
@@ -304,7 +307,10 @@ public sealed class CustomerOrderService(
             Status = OrderStatus.Pending,
             RecipientName = input.RecipientName.Trim(),
             RecipientPhone = input.RecipientPhone.Trim(),
-            DeliveryAddress = input.DeliveryAddress.Trim(),
+            DeliveryAddress = AddressText.Compose(street, ward.FullName, province.FullName),
+            DeliveryAddressDetail = input.AddressDetail.Clean(),
+            DeliveryWardCode = ward.Code,
+            DeliveryProvinceCode = province.Code,
             DeliveryNote = input.DeliveryNote.Clean(),
             PickupStoreName = store.Name,
             PickupAddress = store.Address,
@@ -327,10 +333,10 @@ public sealed class CustomerOrderService(
         db.CartItems.RemoveRange(cart.Items);
         cart.StoreId = null;
 
-        if (input.SaveAddress && !await db.Addresses.AnyAsync(a => a.UserId == uid && a.Street == order.DeliveryAddress, ct))
+        if (input.SaveAddress && !await db.Addresses.AnyAsync(a => a.UserId == uid && a.Street == street && a.WardCode == ward.Code, ct))
         {
             var hasAny = await db.Addresses.AnyAsync(a => a.UserId == uid, ct);
-            db.Addresses.Add(new Address { UserId = uid, Label = "Đã lưu", RecipientName = order.RecipientName, PhoneNumber = order.RecipientPhone, Street = order.DeliveryAddress, City = "", IsDefault = !hasAny, Latitude = dropoff?.Latitude, Longitude = dropoff?.Longitude });
+            db.Addresses.Add(new Address { UserId = uid, Label = "Đã lưu", RecipientName = order.RecipientName, PhoneNumber = order.RecipientPhone, Street = street, WardCode = ward.Code, Ward = ward.FullName, ProvinceCode = province.Code, City = province.FullName, Note = order.DeliveryAddressDetail, IsDefault = !hasAny, Latitude = dropoff?.Latitude, Longitude = dropoff?.Longitude });
         }
 
         db.Audit(uid, "Order.Placed", nameof(Order), order.Code, $"store={store.Id} total={order.GrandTotal}");
@@ -386,7 +392,7 @@ public sealed class CustomerOrderService(
     }
 }
 
-public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users) : IAddressService
+public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IAdministrativeUnits units) : IAddressService
 {
     public async Task<IReadOnlyList<AddressDto>> GetMineAsync(CancellationToken ct = default)
     {
@@ -395,6 +401,10 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         var list = await db.Addresses.AsNoTracking().Where(a => a.UserId == uid).OrderByDescending(a => a.IsDefault).ThenBy(a => a.Id).ToListAsync(ct);
         return list.Select(a => new AddressDto(a.Id, a.Label, a.RecipientName, a.PhoneNumber, a.FullText, a.Note, a.IsDefault)
         {
+            Street = a.Street,
+            // Only expose codes that still exist in the catalog.
+            ProvinceCode = units.FindProvince(a.ProvinceCode)?.Code,
+            WardCode = units.FindWard(a.WardCode)?.Code,
             Latitude = a.Latitude,
             Longitude = a.Longitude,
         }).ToList();
@@ -408,7 +418,7 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         return a is null ? null : new AddressInput
         {
             Id = a.Id, Label = a.Label, RecipientName = a.RecipientName, PhoneNumber = a.PhoneNumber, Street = a.Street,
-            Ward = a.Ward, District = a.District, City = a.City, Note = a.Note, IsDefault = a.IsDefault,
+            ProvinceCode = a.ProvinceCode, WardCode = a.WardCode, Note = a.Note, IsDefault = a.IsDefault,
             Latitude = a.Latitude, Longitude = a.Longitude,
         };
     }
@@ -417,6 +427,7 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
     {
         var uid = (await users.GetAsync(ct)).RequireUserId();
         InputValidation.Validate(input);
+        var (province, ward) = units.Resolve(input.ProvinceCode, input.WardCode);
         await using var db = await dbf.CreateDbContextAsync(ct);
         Address a;
         if (input.Id == 0)
@@ -432,9 +443,10 @@ public sealed class AddressService(IDbContextFactory<AppDbContext> dbf, ICurrent
         a.RecipientName = input.RecipientName.Trim();
         a.PhoneNumber = input.PhoneNumber.Trim();
         a.Street = input.Street.Trim();
-        a.Ward = input.Ward.Clean();
-        a.District = input.District.Clean();
-        a.City = input.City.Trim();
+        a.WardCode = ward.Code;
+        a.Ward = ward.FullName;
+        a.ProvinceCode = province.Code;
+        a.City = province.FullName;
         a.Note = input.Note.Clean();
         var point = GeoPoint.From(input.Latitude, input.Longitude);
         a.Latitude = point?.Latitude;

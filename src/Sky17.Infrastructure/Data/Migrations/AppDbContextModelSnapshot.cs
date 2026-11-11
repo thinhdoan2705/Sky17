@@ -159,9 +159,6 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("District")
-                        .HasColumnType("TEXT");
-
                     b.Property<bool>("IsDefault")
                         .HasColumnType("INTEGER");
 
@@ -177,11 +174,16 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<string>("Note")
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProvinceCode")
+                        .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RecipientName")
@@ -202,6 +204,11 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Ward")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WardCode")
+                        .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -676,10 +683,19 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DeliveryAddressDetail")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("DeliveryFee")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("DeliveryNote")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeliveryProvinceCode")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeliveryWardCode")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("DiscountAmount")

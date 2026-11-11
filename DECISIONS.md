@@ -76,3 +76,11 @@ Reference data (roles, rate rule, settings, platform categories) is always ensur
 
 ## D13. Rate limiting
 Global limiter: POSTs to `/Account/*` 10/min per IP (credential stuffing); other requests 300/min per IP; Blazor/framework traffic exempt.
+
+## D15. Structured addresses (2025 two-level administration)
+- Since 1 July 2025 Vietnam has **two administrative levels**: province/centrally-run city (34) → ward/commune/special zone (3,321). There are no districts any more, so addresses are **Số nhà, tên đường · Phường/Xã · Tỉnh/Thành phố**, plus an optional **Chi tiết địa chỉ** (building, floor, room, alley, landmark).
+- The catalog comes from [vietnamese-provinces-database](https://github.com/thanglequoc/vietnamese-provinces-database) **v5.2.0 (388/NQ-UBTVQH16)**. The supplied MSSQL import script was converted to a compact JSON file, `src/Sky17.Infrastructure/Data/Reference/vn-units.json`, embedded in the assembly and served by `AdministrativeUnitCatalog` (singleton, in memory). It is immutable reference data versioned with the code, so it needs no tables, seeding or admin UI; a new dataset version = replace the JSON.
+- The client only sends codes (`ProvinceCode`, `WardCode`); the server checks that the ward belongs to the province (`IAdministrativeUnits.Resolve`) and **composes the text itself**: `Order.DeliveryAddress = "118 Lê Hồng Phong, Phường Thủ Dầu Một, Thành phố Hồ Chí Minh"`. Orders also snapshot `DeliveryWardCode`, `DeliveryProvinceCode` and `DeliveryAddressDetail`; saved addresses store both codes and full names.
+- `DeliveryAddressDetail` (where exactly to go) is separate from `DeliveryNote` (instructions for the order: call first, less ice…). The detail, like the customer's phone, is shown to a driver only after they accept the trip.
+- Migration `StructuredAddress` drops `Addresses.District` after appending its text to `Street`, so old addresses still read correctly; they have no codes and the UI asks the customer to re-select the ward (they cannot be mapped reliably because wards were merged in 2025).
+- Store addresses are still free text (see TASKS.md).

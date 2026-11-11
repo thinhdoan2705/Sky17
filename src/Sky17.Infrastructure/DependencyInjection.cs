@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddSingleton<OrderWorkflow>();
         services.AddSingleton<Notifier>();
         services.AddSingleton<IDispatchService, DispatchService>();
+        services.AddSingleton<IAdministrativeUnits, AdministrativeUnitCatalog>();
 
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<ICartService, CartService>();

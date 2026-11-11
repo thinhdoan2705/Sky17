@@ -63,6 +63,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             e.Property(x => x.PhoneNumber).HasMaxLength(20);
             e.Property(x => x.Street).HasMaxLength(200);
             e.Property(x => x.City).HasMaxLength(100);
+            e.Property(x => x.Ward).HasMaxLength(100);
+            e.Property(x => x.WardCode).HasMaxLength(10);
+            e.Property(x => x.ProvinceCode).HasMaxLength(10);
+            e.Property(x => x.Note).HasMaxLength(200);
             e.Ignore(x => x.FullText);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });

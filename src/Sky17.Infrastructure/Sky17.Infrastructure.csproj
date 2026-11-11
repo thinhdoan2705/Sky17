@@ -14,6 +14,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Vietnamese administrative units (34 provinces, 3,321 wards; 2025 two-level structure). -->
+    <EmbeddedResource Include="Data/Reference/vn-units.json" LogicalName="Sky17.Infrastructure.Data.Reference.vn-units.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

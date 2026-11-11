@@ -37,6 +37,7 @@
                     <h2>Khách hàng</h2>
                     <p class="mb-0"><b>@order.RecipientName</b> · <a class="link" href="@Fmt.Tel(order.RecipientPhone)">@order.RecipientPhone</a></p>
                     <p class="muted small">@order.DeliveryAddress</p>
+                    @if (!string.IsNullOrEmpty(order.DeliveryAddressDetail)) { <p class="small">🏢 @order.DeliveryAddressDetail</p> }
                     @if (!string.IsNullOrEmpty(order.DeliveryNote)) { <div class="alert alert-info small">📝 @order.DeliveryNote</div> }
                 </section>
                 <section class="card">

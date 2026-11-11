@@ -11,7 +11,7 @@ public class MapPricingTests
     {
         RecipientName = "Nguyễn Văn A",
         RecipientPhone = "0901234567",
-        DeliveryAddress = "118 Lê Hồng Phong, Thủ Dầu Một",
+        Street = "118 Lê Hồng Phong", ProvinceCode = "79", WardCode = "25747",
         IdempotencyKey = Guid.NewGuid(),
         Latitude = 10.9757,
         Longitude = 106.6688,
@@ -122,7 +122,7 @@ public class MapPricingTests
         var customer = await app.CreateUserAsync("C", Roles.Customer);
         using (var c = app.As(customer))
         {
-            var id = await c.Get<IAddressService>().SaveAsync(new AddressInput { RecipientName = "A", PhoneNumber = "0901234567", Street = "1 Test", City = "Bình Dương", Latitude = 10.99, Longitude = 106.67 });
+            var id = await c.Get<IAddressService>().SaveAsync(new AddressInput { RecipientName = "A", PhoneNumber = "0901234567", Street = "1 Test", ProvinceCode = "79", WardCode = "25747", Latitude = 10.99, Longitude = 106.67 });
             var dto = (await c.Get<IAddressService>().GetMineAsync()).Single(a => a.Id == id);
             Assert.Equal(10.99, dto.Latitude);
         }

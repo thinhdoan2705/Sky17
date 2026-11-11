@@ -17,17 +17,30 @@ public class Address : AuditableEntity
     public string Label { get; set; } = "Nhà";
     public required string RecipientName { get; set; }
     public required string PhoneNumber { get; set; }
+    /// <summary>House number and street name.</summary>
     public required string Street { get; set; }
+    /// <summary>Ward/commune code from the national administrative catalog (2025, two-level: province → ward).</summary>
+    public string? WardCode { get; set; }
+    /// <summary>Ward/commune full name snapshot, e.g. "Phường Thủ Dầu Một".</summary>
     public string? Ward { get; set; }
-    public string? District { get; set; }
-    public string City { get; set; } = "Bình Dương";
+    public string? ProvinceCode { get; set; }
+    /// <summary>Province/municipality full name snapshot, e.g. "Thành phố Hồ Chí Minh".</summary>
+    public string City { get; set; } = "";
+    /// <summary>Address details: building, floor, alley, landmark…</summary>
     public string? Note { get; set; }
     public bool IsDefault { get; set; }
     /// <summary>WGS84 coordinates picked on the map (optional).</summary>
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
 
-    public string FullText => string.Join(", ", new[] { Street, Ward, District, City }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    public string FullText => AddressText.Compose(Street, Ward, City);
+}
+
+/// <summary>Formats "Số nhà đường, Phường/Xã, Tỉnh/Thành phố".</summary>
+public static class AddressText
+{
+    public static string Compose(params string?[] parts) =>
+        string.Join(", ", parts.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim()));
 }
 
 // ---------------------------------------------------------------- Stores & catalog
@@ -153,6 +166,10 @@ public class Order : AuditableEntity, IVersioned
     public required string RecipientName { get; set; }
     public required string RecipientPhone { get; set; }
     public required string DeliveryAddress { get; set; }
+    /// <summary>Address details for the driver: building, floor, alley, landmark…</summary>
+    public string? DeliveryAddressDetail { get; set; }
+    public string? DeliveryWardCode { get; set; }
+    public string? DeliveryProvinceCode { get; set; }
     public string? DeliveryNote { get; set; }
 
     // Pickup snapshot

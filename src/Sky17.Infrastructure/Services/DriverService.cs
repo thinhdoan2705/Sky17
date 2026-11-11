@@ -27,6 +27,8 @@ public sealed class DriverService(
         // The exact drop-off point is personal data: only the assigned driver gets it.
         DropoffLatitude = mine ? o.DropoffLatitude : null,
         DropoffLongitude = mine ? o.DropoffLongitude : null,
+        // Building/floor/alley details are only revealed to the assigned driver.
+        DropoffDetail = mine ? o.DeliveryAddressDetail : null,
         PreparationState = o.PreparationState,
     };
 

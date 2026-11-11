@@ -6,6 +6,7 @@
 @inject IAddressService Addresses
 @inject IProfileService Profiles
 @inject CartState CartBadge
+@inject IAdministrativeUnits Units
 
 <PageHeader Title="Thanh toán" Subtitle="Kiểm tra thông tin và xác nhận đơn hàng" />
 
@@ -28,7 +29,9 @@ else
                         {
                             <label class="row-item" style="cursor:pointer">
                                 <input type="radio" name="addr" checked="@(selectedAddress == a.Id)" @onchange="() => UseAddress(a)" />
-                                <div class="grow"><strong>@a.Label · @a.RecipientName · @a.PhoneNumber</strong><span class="small muted">@a.FullText</span></div>
+                                <div class="grow"><strong>@a.Label · @a.RecipientName · @a.PhoneNumber</strong><span class="small muted">@a.FullText</span>
+                                    @if (!string.IsNullOrEmpty(a.Note)) { <span class="small muted">🏢 @a.Note</span> }
+                                    @if (!a.HasAdministrativeUnit) { <span class="small danger-text">Cần chọn lại Phường/Xã</span> }</div>
                             </label>
                         }
                         <label class="row-item" style="cursor:pointer">
@@ -50,16 +53,27 @@ else
                     </div>
                 </div>
                 <div class="field">
-                    <label for="ra">Địa chỉ nhận hàng</label>
-                    <InputTextArea id="ra" rows="2" @bind-Value="input.DeliveryAddress" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh" />
-                    <ValidationMessage For="() => input.DeliveryAddress" />
+                    <label for="ra">Số nhà, tên đường</label>
+                    <InputText id="ra" @bind-Value="input.Street" placeholder="Ví dụ: 118 Lê Hồng Phong" />
+                    <ValidationMessage For="() => input.Street" />
+                </div>
+                <div class="fields">
+                    <AdminUnitPicker Id="co" @bind-ProvinceCode="input.ProvinceCode" @bind-WardCode="input.WardCode">
+                        <ProvinceValidation><ValidationMessage For="() => input.ProvinceCode" /></ProvinceValidation>
+                        <WardValidation><ValidationMessage For="() => input.WardCode" /></WardValidation>
+                    </AdminUnitPicker>
+                </div>
+                <div class="field">
+                    <label for="rdetail">Chi tiết địa chỉ <span class="muted small">(không bắt buộc)</span></label>
+                    <InputText id="rdetail" @bind-Value="input.AddressDetail" placeholder="Tòa nhà, tầng, số phòng, hẻm, mốc dễ nhận biết…" />
+                    <ValidationMessage For="() => input.AddressDetail" />
                 </div>
                 <div class="field">
                     <label for="rnote">Ghi chú cho tài xế / cửa hàng</label>
                     <InputTextArea id="rnote" rows="2" @bind-Value="input.DeliveryNote" placeholder="Ví dụ: gọi trước khi đến, ít đá..." />
                 </div>
                 <LocationPicker Label="📍 Ghim điểm giao trên bản đồ" Latitude="input.Latitude" Longitude="input.Longitude"
-                                SearchText="@input.DeliveryAddress" OnChanged="SetDropoff" />
+                                SearchText="@MapSearchText" OnChanged="SetDropoff" />
                 @if (selectedAddress == 0)
                 {
                     <label class="check"><InputCheckbox @bind-Value="input.SaveAddress" /> Lưu địa chỉ này vào sổ địa chỉ</label>
@@ -153,8 +167,10 @@ else
         selectedAddress = a.Id;
         input.RecipientName = a.RecipientName;
         input.RecipientPhone = a.PhoneNumber;
-        input.DeliveryAddress = a.FullText;
-        if (string.IsNullOrEmpty(input.DeliveryNote)) input.DeliveryNote = a.Note;
+        input.Street = a.Street;
+        input.ProvinceCode = a.ProvinceCode;
+        input.WardCode = a.WardCode;
+        input.AddressDetail = a.Note;
         input.SaveAddress = false;
         input.Latitude = a.Latitude;
         input.Longitude = a.Longitude;
@@ -164,11 +180,16 @@ else
     private async Task UseNew()
     {
         selectedAddress = 0;
-        input.DeliveryAddress = "";
+        input.Street = "";
+        input.WardCode = null;
+        input.AddressDetail = null;
         input.SaveAddress = true;
         input.Latitude = input.Longitude = null;
         await RefreshQuoteAsync();
     }
+
+    private string MapSearchText =>
+        Sky17.Domain.AddressText.Compose(input.Street, Units.FindWard(input.WardCode)?.FullName, Units.FindProvince(input.ProvinceCode)?.FullName);
 
     private Task PlaceAsync() => RunAsync(async () =>
     {

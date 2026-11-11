@@ -171,7 +171,7 @@ public sealed class TestApp : IAsyncDisposable
     {
         RecipientName = "Nguyễn Văn A",
         RecipientPhone = "0901234567",
-        DeliveryAddress = "118 Lê Hồng Phong, Thủ Dầu Một",
+        Street = "118 Lê Hồng Phong", ProvinceCode = "79", WardCode = "25747",
         IdempotencyKey = key ?? Guid.NewGuid(),
     };
 

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inherits PortalPage
 @inject IAddressService Addresses
+@inject IAdministrativeUnits Units
 
 <PageHeader Title="Sổ địa chỉ" Subtitle="Địa chỉ nhận hàng đã lưu">
     <Actions><button class="btn" @onclick="New">+ Thêm địa chỉ</button></Actions>
@@ -25,7 +26,8 @@ else
                 <p class="mb-0"><b>@a.RecipientName</b> · @a.PhoneNumber</p>
                 <p class="muted">@a.FullText</p>
                 <p class="small @(a.Latitude is null ? "danger-text" : "success-text")">@(a.Latitude is null ? "⚠ Chưa ghim vị trí trên bản đồ" : "📍 Đã ghim vị trí")</p>
-                @if (!string.IsNullOrEmpty(a.Note)) { <p class="small">📝 @a.Note</p> }
+                @if (!string.IsNullOrEmpty(a.Note)) { <p class="small">🏢 @a.Note</p> }
+                @if (!a.HasAdministrativeUnit) { <p class="small danger-text">⚠ Địa chỉ cũ: vui lòng bấm “Sửa” để chọn lại Phường/Xã theo danh mục mới.</p> }
                 <div class="flex flex-wrap">
                     <button class="btn btn-soft btn-sm" @onclick="() => Edit(a.Id)">Sửa</button>
                     @if (!a.IsDefault) { <button class="btn btn-outline btn-sm" disabled="@Busy" @onclick="() => SetDefault(a.Id)">Đặt mặc định</button> }
@@ -45,14 +47,15 @@ else
                 <div class="field"><label>Nhãn</label><InputText @bind-Value="editing.Label" placeholder="Nhà, Công ty..." /><ValidationMessage For="() => editing.Label" /></div>
                 <div class="field"><label>Người nhận</label><InputText @bind-Value="editing.RecipientName" /><ValidationMessage For="() => editing.RecipientName" /></div>
                 <div class="field"><label>Số điện thoại</label><InputText type="tel" @bind-Value="editing.PhoneNumber" /><ValidationMessage For="() => editing.PhoneNumber" /></div>
-                <div class="field"><label>Số nhà, đường</label><InputText @bind-Value="editing.Street" /><ValidationMessage For="() => editing.Street" /></div>
-                <div class="field"><label>Phường/Xã</label><InputText @bind-Value="editing.Ward" /></div>
-                <div class="field"><label>Quận/Huyện</label><InputText @bind-Value="editing.District" /></div>
-                <div class="field"><label>Tỉnh/Thành phố</label><InputText @bind-Value="editing.City" /><ValidationMessage For="() => editing.City" /></div>
-                <div class="field"><label>Ghi chú</label><InputText @bind-Value="editing.Note" /></div>
+                <div class="field"><label>Số nhà, tên đường</label><InputText @bind-Value="editing.Street" placeholder="Ví dụ: 118 Lê Hồng Phong" /><ValidationMessage For="() => editing.Street" /></div>
+                <AdminUnitPicker Id="ab" @bind-ProvinceCode="editing.ProvinceCode" @bind-WardCode="editing.WardCode">
+                    <ProvinceValidation><ValidationMessage For="() => editing.ProvinceCode" /></ProvinceValidation>
+                    <WardValidation><ValidationMessage For="() => editing.WardCode" /></WardValidation>
+                </AdminUnitPicker>
+                <div class="field"><label>Chi tiết địa chỉ <span class="muted small">(không bắt buộc)</span></label><InputText @bind-Value="editing.Note" placeholder="Tòa nhà, tầng, số phòng, hẻm, mốc dễ nhận biết…" /></div>
             </div>
             <LocationPicker Label="Ghim vị trí giao hàng (giúp tính phí chính xác)" Latitude="editing.Latitude" Longitude="editing.Longitude"
-                            SearchText="@string.Join(", ", new[] { editing.Street, editing.Ward, editing.District, editing.City }.Where(s => !string.IsNullOrWhiteSpace(s)))"
+                            SearchText="@MapSearchText"
                             OnChanged="SetLocation" Height="220px" />
             <label class="check"><InputCheckbox @bind-Value="editing.IsDefault" /> Đặt làm địa chỉ mặc định</label>
             <div class="form-actions"><button type="submit" class="btn" disabled="@Busy">Lưu địa chỉ</button></div>
@@ -72,6 +75,9 @@ else
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null;
 
     private Task SetDefault(int id) => RunAsync(() => Addresses.SetDefaultAsync(id), "Đã đặt làm mặc định");
+    private string MapSearchText => editing is null ? "" :
+        Sky17.Domain.AddressText.Compose(editing.Street, Units.FindWard(editing.WardCode)?.FullName, Units.FindProvince(editing.ProvinceCode)?.FullName);
+
     private void New() => editing = new AddressInput { IsDefault = list.Count == 0 };
     private void SetLocation((double? Lat, double? Lng) p) { editing!.Latitude = p.Lat; editing.Longitude = p.Lng; }
     private async Task Edit(int id) => editing = await Addresses.GetForEditAsync(id);

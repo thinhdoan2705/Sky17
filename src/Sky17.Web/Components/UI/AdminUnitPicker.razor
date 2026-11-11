@@ -1,0 +1,93 @@
+@* Province → ward/commune picker (2025 two-level administration, national catalog). *@
+@inject IAdministrativeUnits Units
+
+<div class="field">
+    <label for="@($"{Id}-province")">Tỉnh/Thành phố</label>
+    <select id="@($"{Id}-province")" value="@ProvinceCode" @onchange="OnProvinceChanged">
+        <option value="">— Chọn tỉnh/thành phố —</option>
+        @foreach (var p in Units.Provinces)
+        {
+            <option value="@p.Code">@p.FullName</option>
+        }
+    </select>
+    @ProvinceValidation
+</div>
+<div class="field">
+    <label for="@($"{Id}-ward")">Phường/Xã</label>
+    @if (wards.Count > 30)
+    {
+        <input class="ward-filter" type="search" placeholder="Gõ để lọc phường/xã…" value="@filter"
+               @oninput="SetFilter" disabled="@(ProvinceCode is null)" aria-label="Lọc phường/xã" />
+    }
+    <select id="@($"{Id}-ward")" value="@WardCode" @onchange="OnWardChanged" disabled="@(ProvinceCode is null)">
+        <option value="">@(ProvinceCode is null ? "— Chọn tỉnh/thành phố trước —" : $"— Chọn phường/xã ({wards.Count}) —")</option>
+        @foreach (var w in VisibleWards)
+        {
+            <option value="@w.Code">@w.FullName</option>
+        }
+    </select>
+    @WardValidation
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = "addr";
+    [Parameter] public string? ProvinceCode { get; set; }
+    [Parameter] public EventCallback<string?> ProvinceCodeChanged { get; set; }
+    [Parameter] public string? WardCode { get; set; }
+    [Parameter] public EventCallback<string?> WardCodeChanged { get; set; }
+    /// <summary>Raised after either value changes (e.g. to refresh the map search text).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public RenderFragment? ProvinceValidation { get; set; }
+    [Parameter] public RenderFragment? WardValidation { get; set; }
+
+    private IReadOnlyList<WardDto> wards = [];
+    private string filter = "";
+    private string? loadedFor;
+
+    private void SetFilter(ChangeEventArgs e) => filter = e.Value?.ToString() ?? "";
+
+    protected override void OnParametersSet()
+    {
+        if (loadedFor == ProvinceCode) return;
+        loadedFor = ProvinceCode;
+        wards = Units.WardsOf(ProvinceCode);
+        filter = "";
+    }
+
+    private IEnumerable<WardDto> VisibleWards
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(filter)) return wards;
+            var f = Fold(filter);
+            // Keep the selected ward visible so the <select> never loses its value.
+            return wards.Where(w => w.Code == WardCode || Fold(w.Name).Contains(f, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>Accent-insensitive match ("thu dau mot" finds "Thủ Dầu Một").</summary>
+    private static string Fold(string s)
+    {
+        var n = s.Trim().ToLowerInvariant().Replace('đ', 'd').Normalize(System.Text.NormalizationForm.FormD);
+        return new string(n.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+    }
+
+    private async Task OnProvinceChanged(ChangeEventArgs e)
+    {
+        var code = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString();
+        if (code == ProvinceCode) return;
+        ProvinceCode = code;
+        await ProvinceCodeChanged.InvokeAsync(code);
+        // A ward from another province is never valid.
+        WardCode = null;
+        await WardCodeChanged.InvokeAsync(null);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnWardChanged(ChangeEventArgs e)
+    {
+        WardCode = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString();
+        await WardCodeChanged.InvokeAsync(WardCode);
+        await OnChanged.InvokeAsync();
+    }
+}

@@ -101,6 +101,7 @@ internal static class OrderQueries
             DropoffLatitude = o.DropoffLatitude,
             DropoffLongitude = o.DropoffLongitude,
             DistanceSource = o.DistanceSource,
+            DeliveryAddressDetail = o.DeliveryAddressDetail,
             PreparationState = o.PreparationState,
             FoodReadyAtUtc = o.FoodReadyAtUtc,
             DispatchStartedAtUtc = o.DispatchStartedAtUtc,

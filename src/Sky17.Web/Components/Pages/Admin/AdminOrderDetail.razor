@@ -82,6 +82,7 @@ else
                 <div class="row-item"><span class="grow muted">Khách hàng</span><a class="link" href="/admin/customers/@o.CustomerId">@o.CustomerName</a></div>
                 <div class="row-item"><span class="grow muted">Người nhận</span><b>@o.RecipientName · @o.RecipientPhone</b></div>
                 <div class="row-item"><span class="grow muted">Giao đến</span><span class="text-right">@o.DeliveryAddress</span></div>
+                @if (!string.IsNullOrEmpty(o.DeliveryAddressDetail)) { <div class="row-item"><span class="grow muted">Chi tiết địa chỉ</span><span class="text-right">@o.DeliveryAddressDetail</span></div> }
                 @if (!string.IsNullOrEmpty(o.DeliveryNote)) { <div class="row-item"><span class="grow muted">Ghi chú</span><span>@o.DeliveryNote</span></div> }
                 <div class="row-item"><span class="grow muted">Lấy tại</span><span class="text-right"><a class="link" href="/admin/stores/@o.StoreId">@o.StoreName</a><br /><span class="small muted">@o.PickupAddress · @o.PickupPhone</span></span></div>
                 <div class="row-item"><span class="grow muted">Khoảng cách</span><span>@Fmt.Distance(o.DistanceMeters)</span></div>

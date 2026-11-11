@@ -16,6 +16,7 @@
         <div>
             <b>Giao đến · @Job.RecipientName</b>
             <p class="muted small">@Job.DropoffAddress</p>
+            @if (!string.IsNullOrEmpty(Job.DropoffDetail)) { <div class="small">🏢 @Job.DropoffDetail</div> }
             <div class="contact small">
                 @if (Job.CustomerPhone is not null)
                 {

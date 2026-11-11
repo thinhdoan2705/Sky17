@@ -155,19 +155,19 @@ public static class DbSeeder
             new DriverProfile { UserId = d3.Id, LicensePlate = "61B2-24680", VehicleType = "Xe máy", Status = DriverStatus.PendingApproval });
 
         db.Addresses.AddRange(
-            new Address { UserId = c1.Id, Label = "Nhà", RecipientName = "Nguyễn Minh Anh", PhoneNumber = "0904000001", Street = "118 Lê Hồng Phong", Ward = "Phú Hòa", District = "Thủ Dầu Một", City = "Bình Dương", IsDefault = true, Latitude = 10.9757, Longitude = 106.6688 },
-            new Address { UserId = c1.Id, Label = "Công ty", RecipientName = "Nguyễn Minh Anh", PhoneNumber = "0904000001", Street = "Tòa Becamex, 230 Đại lộ Bình Dương", District = "Thủ Dầu Một", City = "Bình Dương", Latitude = 10.9845, Longitude = 106.6703 },
-            new Address { UserId = c2.Id, Label = "Nhà", RecipientName = "Trần Gia Huy", PhoneNumber = "0904000002", Street = "10 Phú Lợi", Ward = "Phú Lợi", District = "Thủ Dầu Một", City = "Bình Dương", IsDefault = true, Latitude = 10.9932, Longitude = 106.6741 });
+            new Address { UserId = c1.Id, Label = "Nhà", RecipientName = "Nguyễn Minh Anh", PhoneNumber = "0904000001", Street = "118 Lê Hồng Phong", WardCode = "25747", Ward = "Phường Thủ Dầu Một", ProvinceCode = "79", City = "Thành phố Hồ Chí Minh", Note = "Nhà cổng xanh, gần tiệm thuốc", IsDefault = true, Latitude = 10.9757, Longitude = 106.6688 },
+            new Address { UserId = c1.Id, Label = "Công ty", RecipientName = "Nguyễn Minh Anh", PhoneNumber = "0904000001", Street = "230 Đại lộ Bình Dương", WardCode = "25747", Ward = "Phường Thủ Dầu Một", ProvinceCode = "79", City = "Thành phố Hồ Chí Minh", Note = "Tòa Becamex, tầng 5, quầy lễ tân", Latitude = 10.9845, Longitude = 106.6703 },
+            new Address { UserId = c2.Id, Label = "Nhà", RecipientName = "Trần Gia Huy", PhoneNumber = "0904000002", Street = "10 Phú Lợi", WardCode = "25750", Ward = "Phường Phú Lợi", ProvinceCode = "79", City = "Thành phố Hồ Chí Minh", IsDefault = true, Latitude = 10.9932, Longitude = 106.6741 });
 
         var cats = await db.Categories.Where(c => c.StoreId == null).ToDictionaryAsync(c => c.Name, ct);
         var full = new TimeOnly(0, 0); // OpenTime == CloseTime means open 24h (demo convenience)
 
-        var coffee = new Store { Name = "Sky Coffee", Emoji = "☕", Tagline = "Đồ uống · Ăn nhanh", Description = "Cà phê, đồ uống và đồ ăn nhanh tươi ngon mỗi ngày.", PhoneNumber = "0274 3888 001", Address = "21 Nguyễn Huệ, Phú Cường, Thủ Dầu Một, Bình Dương", Status = StoreStatus.Active, ApprovedAtUtc = now.AddDays(-40), OpenTime = full, CloseTime = full, Latitude = 10.9804, Longitude = 106.6531 };
+        var coffee = new Store { Name = "Sky Coffee", Emoji = "☕", Tagline = "Đồ uống · Ăn nhanh", Description = "Cà phê, đồ uống và đồ ăn nhanh tươi ngon mỗi ngày.", PhoneNumber = "0274 3888 001", Address = "21 Nguyễn Huệ, Phường Thủ Dầu Một, Thành phố Hồ Chí Minh", Status = StoreStatus.Active, ApprovedAtUtc = now.AddDays(-40), OpenTime = full, CloseTime = full, Latitude = 10.9804, Longitude = 106.6531 };
         coffee.Members.Add(new StoreMember { UserId = ownerCoffee.Id, Role = StoreMemberRole.Owner });
         coffee.Members.Add(new StoreMember { UserId = staffCoffee.Id, Role = StoreMemberRole.Staff });
-        var bep = new Store { Name = "Bếp Nhà Mây", Emoji = "🍜", Tagline = "Cơm & Mì", Description = "Cơm nhà, phở và mì nóng hổi.", PhoneNumber = "0274 3888 002", Address = "85 Cách Mạng Tháng Tám, Thủ Dầu Một, Bình Dương", Status = StoreStatus.Active, ApprovedAtUtc = now.AddDays(-35), OpenTime = full, CloseTime = full, Latitude = 10.9729, Longitude = 106.6577 };
+        var bep = new Store { Name = "Bếp Nhà Mây", Emoji = "🍜", Tagline = "Cơm & Mì", Description = "Cơm nhà, phở và mì nóng hổi.", PhoneNumber = "0274 3888 002", Address = "85 Cách Mạng Tháng Tám, Phường Thủ Dầu Một, Thành phố Hồ Chí Minh", Status = StoreStatus.Active, ApprovedAtUtc = now.AddDays(-35), OpenTime = full, CloseTime = full, Latitude = 10.9729, Longitude = 106.6577 };
         bep.Members.Add(new StoreMember { UserId = ownerBep.Id, Role = StoreMemberRole.Owner });
-        var bakery = new Store { Name = "Mây Bakery", Emoji = "🥐", Tagline = "Bánh ngọt · Bánh mì", Description = "Bánh nướng mới mỗi sáng.", PhoneNumber = "0274 3888 003", Address = "12 Yersin, Thủ Dầu Một, Bình Dương", Status = StoreStatus.PendingApproval, OpenTime = new(6, 0), CloseTime = new(21, 0), Latitude = 10.9846, Longitude = 106.6563 };
+        var bakery = new Store { Name = "Mây Bakery", Emoji = "🥐", Tagline = "Bánh ngọt · Bánh mì", Description = "Bánh nướng mới mỗi sáng.", PhoneNumber = "0274 3888 003", Address = "12 Yersin, Phường Thủ Dầu Một, Thành phố Hồ Chí Minh", Status = StoreStatus.PendingApproval, OpenTime = new(6, 0), CloseTime = new(21, 0), Latitude = 10.9846, Longitude = 106.6563 };
         bakery.Members.Add(new StoreMember { UserId = ownerBakery.Id, Role = StoreMemberRole.Owner });
 
         Product P(Store s, string name, long price, int stock, string emoji, string cat, string? desc = null)
@@ -192,8 +192,8 @@ public static class DbSeeder
         await db.SaveChangesAsync(ct);
 
         var rule = await db.DeliveryRateRules.FirstAsync(r => r.IsActive, ct);
-        var c1Addr = "118 Lê Hồng Phong, Phú Hòa, Thủ Dầu Một, Bình Dương";
-        var c2Addr = "10 Phú Lợi, Phú Lợi, Thủ Dầu Một, Bình Dương";
+        var c1Addr = "118 Lê Hồng Phong, Phường Thủ Dầu Một, Thành phố Hồ Chí Minh";
+        var c2Addr = "10 Phú Lợi, Phường Phú Lợi, Thành phố Hồ Chí Minh";
 
         void AddOrder(ApplicationUser cust, string name, string phone, string addr, Store s, (Product P, int Q)[] lines, double daysAgo, OrderStatus status, ApplicationUser? driver, string? reason = null)
         {
@@ -202,6 +202,8 @@ public static class DbSeeder
             {
                 Code = $"SKY{placed:yyMMdd}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}",
                 CustomerId = cust.Id, StoreId = s.Id, RecipientName = name, RecipientPhone = phone, DeliveryAddress = addr,
+                DeliveryWardCode = addr == c1Addr ? "25747" : "25750", DeliveryProvinceCode = "79",
+                DeliveryAddressDetail = addr == c1Addr ? "Nhà cổng xanh, gần tiệm thuốc" : null,
                 PickupStoreName = s.Name, PickupAddress = s.Address, PickupPhone = s.PhoneNumber,
                 PickupLatitude = s.Latitude, PickupLongitude = s.Longitude,
                 DropoffLatitude = addr == c1Addr ? 10.9757 : 10.9932, DropoffLongitude = addr == c1Addr ? 106.6688 : 106.6741,
