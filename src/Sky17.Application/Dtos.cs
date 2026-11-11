@@ -51,7 +51,7 @@ public sealed class CheckoutInput
     public string RecipientName { get; set; } = "";
 
     [Required(ErrorMessage = "Vui lòng nhập số điện thoại")]
-    [RegularExpression(@"^(\+84|0)\d{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ")]
+    [VnPhone]
     public string RecipientPhone { get; set; } = "";
 
     [Required(ErrorMessage = "Vui lòng nhập địa chỉ nhận hàng")]
@@ -144,7 +144,7 @@ public sealed class AddressInput
     public string RecipientName { get; set; } = "";
 
     [Required(ErrorMessage = "Nhập số điện thoại")]
-    [RegularExpression(@"^(\+84|0)\d{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ")]
+    [VnPhone]
     public string PhoneNumber { get; set; } = "";
 
     [Required(ErrorMessage = "Nhập số nhà, tên đường"), StringLength(200)]
@@ -173,7 +173,7 @@ public sealed class ProfileInput
     [Required(ErrorMessage = "Vui lòng nhập họ tên"), StringLength(100)]
     public string FullName { get; set; } = "";
 
-    [RegularExpression(@"^(\+84|0)\d{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ")]
+    [VnPhone]
     public string? PhoneNumber { get; set; }
 }
 
@@ -196,7 +196,7 @@ public sealed class RegisterInput
     public string Email { get; set; } = "";
 
     [Required(ErrorMessage = "Vui lòng nhập số điện thoại")]
-    [RegularExpression(@"^(\+84|0)\d{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ")]
+    [VnPhone]
     public string PhoneNumber { get; set; } = "";
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu")]
@@ -216,5 +216,7 @@ public sealed class RegisterInput
     [StringLength(30)] public string? VehicleType { get; set; }
     [StringLength(20)] public string? IdentityNumber { get; set; }
 }
+
+public sealed record LoginLookup(string? UserId, string? UserName, string? Error);
 
 public sealed record RegisterResult(bool Succeeded, string? UserId, IReadOnlyList<string> Errors);

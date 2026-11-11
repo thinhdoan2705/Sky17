@@ -58,7 +58,7 @@ public sealed class StoreProfileInput
     [StringLength(60)] public string? Tagline { get; set; }
 
     [Required(ErrorMessage = "Nhập số điện thoại")]
-    [RegularExpression(@"^(\+84|0)\d{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ")]
+    [VnPhone]
     public string PhoneNumber { get; set; } = "";
 
     [Required(ErrorMessage = "Nhập địa chỉ"), StringLength(200)] public string Address { get; set; } = "";

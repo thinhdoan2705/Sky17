@@ -36,14 +36,15 @@
     </div>
     <div class="fields">
         <div class="field">
-            <label for="email">Email</label>
-            <InputText id="email" @bind-Value="Input.Email" autocomplete="username" />
-            <ValidationMessage For="() => Input.Email" />
+            <label for="phone">@(Input.Kind == RegistrationKind.Customer ? "Số điện thoại (tên đăng nhập)" : "Số điện thoại")</label>
+            <InputText id="phone" type="tel" @bind-Value="Input.PhoneNumber" placeholder="09xxxxxxxx"
+                       autocomplete="@(Input.Kind == RegistrationKind.Customer ? "username" : "tel")" />
+            <ValidationMessage For="() => Input.PhoneNumber" />
         </div>
         <div class="field">
-            <label for="phone">Số điện thoại</label>
-            <InputText id="phone" type="tel" @bind-Value="Input.PhoneNumber" placeholder="09xxxxxxxx" />
-            <ValidationMessage For="() => Input.PhoneNumber" />
+            <label for="email">@(Input.Kind == RegistrationKind.Customer ? "Email (dùng khi quên mật khẩu)" : "Email (tên đăng nhập)")</label>
+            <InputText id="email" @bind-Value="Input.Email" autocomplete="@(Input.Kind == RegistrationKind.Customer ? "email" : "username")" />
+            <ValidationMessage For="() => Input.Email" />
         </div>
     </div>
     @if (Input.Kind == RegistrationKind.Seller)
@@ -96,7 +97,7 @@
 
 <div class="auth-links">
     <span class="muted">Đã có tài khoản?</span>
-    <a class="link" href="/Account/Login">Đăng nhập →</a>
+    <a class="link" href="@(Kind == "seller" ? "/seller/login" : Kind == "driver" ? "/driver/login" : "/login")">Đăng nhập →</a>
 </div>
 
 @code {

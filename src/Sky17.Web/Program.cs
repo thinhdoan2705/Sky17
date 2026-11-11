@@ -102,7 +102,7 @@ builder.Services.AddRateLimiter(o =>
     {
         var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         // Authentication form posts: strict limit to slow down credential stuffing.
-        if (HttpMethods.IsPost(ctx.Request.Method) && ctx.Request.Path.StartsWithSegments("/Account"))
+        if (HttpMethods.IsPost(ctx.Request.Method) && (ctx.Request.Path.StartsWithSegments("/Account") || Sky17.Web.Components.Account.LoginPortals.IsLoginPath(ctx.Request.Path)))
             return RateLimitPartition.GetFixedWindowLimiter("auth:" + ip, _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) });
         if (ctx.Request.Path.StartsWithSegments("/_framework") || ctx.Request.Path.StartsWithSegments("/_blazor"))
             return RateLimitPartition.GetNoLimiter("framework");

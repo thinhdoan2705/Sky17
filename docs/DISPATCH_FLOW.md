@@ -92,9 +92,9 @@ The tracking page shows a Grab-like status banner (Đang chờ quán xác nhận
 
 Password for all demo accounts: `Seed:DemoPassword` in `appsettings.Development.json`.
 
-1. Log in as **`driver.minhtri@sky17.local`** (free, online, ~300 m from Sky Coffee). The seeded order *“đang tìm tài xế”* rings within a few seconds.
+1. Log in at `/driver/login` as **`driver.minhtri@sky17.local`** (free, online, ~300 m from Sky Coffee). The seeded order *“đang tìm tài xế”* rings within a few seconds.
    - If more than 15 minutes passed since startup, the seeded position is stale: keep the driver page open (GPS) or pin a spot near Thủ Dầu Một under **Hồ sơ & vị trí → Ghim vị trí thủ công**.
-2. In another browser (or a private window) log in as **`customer.minhanh@sky17.local`**, order from Sky Coffee and pin the drop-off on the map.
-3. Log in as **`owner.skycoffee@sky17.local`** → **Đơn hàng → Nhận đơn**. The free driver's phone rings immediately.
+2. In another browser (or a private window) log in at `/login` as customer **`0904000001`** (phone number), order from Sky Coffee and pin the drop-off on the map.
+3. Log in at `/seller/login` as **`owner.skycoffee@sky17.local`** → **Đơn hàng → Nhận đơn**. The free driver's phone rings immediately.
 4. Driver accepts → goes through the trip steps. The customer page updates live; the seller can press **Món đã sẵn sàng**.
 5. Let an offer run out (30 s) or press **Bỏ qua** to see it move to the next driver (log in a second driver, e.g. `driver.vuanh@sky17.local`, after their current trip ends).

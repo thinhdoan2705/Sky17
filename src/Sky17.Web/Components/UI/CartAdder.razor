@@ -19,7 +19,7 @@
         var user = AuthState is null ? null : (await AuthState).User;
         if (user?.Identity?.IsAuthenticated != true)
         {
-            Nav.NavigateTo("/Account/Login?returnUrl=" + Uri.EscapeDataString("/" + Nav.ToBaseRelativePath(Nav.Uri)), forceLoad: true);
+            Nav.NavigateTo(Sky17.Web.Components.Account.LoginPortals.LoginUrlFor("/" + Nav.ToBaseRelativePath(Nav.Uri)), forceLoad: true);
             return;
         }
         if (!user.IsInRole(Roles.Customer))

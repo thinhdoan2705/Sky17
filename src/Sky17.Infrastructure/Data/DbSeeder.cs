@@ -34,6 +34,7 @@ public static class DbSeeder
         await EnsureReferenceDataAsync(db, ct);
 
         var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
+        await EnsureCustomerPhoneLoginsAsync(userManager, db, logger, ct);
         if (!string.IsNullOrWhiteSpace(options.AdminEmail) && !string.IsNullOrWhiteSpace(options.AdminPassword))
         {
             await EnsureUserAsync(userManager, db, options.AdminEmail, options.AdminPassword, "Quản trị viên", "0900000000", Roles.Admin);
@@ -83,12 +84,42 @@ public static class DbSeeder
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Customers log in with their phone number. Converts existing customer-only accounts whose login name
+    /// is still an e-mail (created before this rule) when the phone number is valid and not taken.
+    /// </summary>
+    private static async Task EnsureCustomerPhoneLoginsAsync(UserManager<ApplicationUser> um, AppDbContext db, ILogger logger, CancellationToken ct)
+    {
+        var customerRoleId = await db.Roles.Where(r => r.Name == Roles.Customer).Select(r => r.Id).FirstOrDefaultAsync(ct);
+        if (customerRoleId is null) return;
+        var candidates = await db.Users.AsNoTracking()
+            .Where(u => u.UserName!.Contains("@")
+                        && db.UserRoles.Any(r => r.UserId == u.Id && r.RoleId == customerRoleId)
+                        && !db.UserRoles.Any(r => r.UserId == u.Id && r.RoleId != customerRoleId))
+            .Select(u => new { u.Id, u.PhoneNumber, ProfilePhone = db.UserProfiles.Where(p => p.UserId == u.Id).Select(p => p.PhoneNumber).FirstOrDefault() })
+            .ToListAsync(ct);
+        foreach (var c in candidates)
+        {
+            var phone = PhoneNumbers.Normalize(c.PhoneNumber ?? c.ProfilePhone);
+            if (phone is null || await um.FindByNameAsync(phone) is not null)
+            {
+                logger.LogWarning("Customer {UserId} keeps an e-mail login: phone missing or already used.", c.Id);
+                continue;
+            }
+            var user = await um.FindByIdAsync(c.Id);
+            if (user is null) continue;
+            user.PhoneNumber = phone;
+            var r = await um.SetUserNameAsync(user, phone);
+            if (r.Succeeded) logger.LogInformation("Customer {UserId} now logs in with phone {Phone}.", c.Id, phone);
+        }
+    }
+
     private static async Task<ApplicationUser> EnsureUserAsync(UserManager<ApplicationUser> um, AppDbContext db, string email, string password, string name, string phone, params string[] roles)
     {
         var user = await um.FindByEmailAsync(email);
         if (user is null)
         {
-            user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true, PhoneNumber = phone, IsActive = true, LockoutEnabled = true };
+            user = new ApplicationUser { UserName = roles.Length == 1 && roles[0] == Roles.Customer ? PhoneNumbers.Normalize(phone) : email, Email = email, EmailConfirmed = true, PhoneNumber = phone, IsActive = true, LockoutEnabled = true };
             var result = await um.CreateAsync(user, password);
             if (!result.Succeeded) throw new InvalidOperationException("Seed user failed: " + string.Join("; ", result.Errors.Select(e => e.Description)));
         }

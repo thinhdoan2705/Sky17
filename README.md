@@ -24,19 +24,19 @@ Reset the demo database: stop the app and delete `src/Sky17.Web/Data/sky17.db*`.
 ## Development accounts
 Seeded only when `ASPNETCORE_ENVIRONMENT=Development`. The password is **not in code**; it is `Seed:DemoPassword` in `src/Sky17.Web/appsettings.Development.json` (default `Sky17@Dev2026`; override with user-secrets or the `Seed__DemoPassword` env var).
 
-| Role | Email | Notes |
+| Role | Login (page) | Notes |
 |---|---|---|
-| Admin | `admin@sky17.local` | |
-| Seller (owner) | `owner.skycoffee@sky17.local` | Sky Coffee (active) |
+| Admin | `admin@sky17.local` (`/admin/login`) | |
+| Seller (owner) | `owner.skycoffee@sky17.local` (`/seller/login`) | Sky Coffee (active) |
 | Seller (staff) | `staff.skycoffee@sky17.local` | Staff of Sky Coffee |
 | Seller (owner) | `owner.bepnhamay@sky17.local` | Bếp Nhà Mây (active) |
 | Seller (owner) | `owner.maybakery@sky17.local` | Mây Bakery (**pending approval**) |
-| Driver | `driver.lehoang@sky17.local` | Approved, online |
+| Driver | `driver.lehoang@sky17.local` (`/driver/login`) | Approved, online |
 | Driver | `driver.vuanh@sky17.local` | Approved, offline |
 | Driver | `driver.anhkhoa@sky17.local` | **Pending approval** |
 | Driver | `driver.minhtri@sky17.local` | Approved, online, **free** ~300 m from Sky Coffee — receives the seeded “đang tìm tài xế” order |
-| Customer | `customer.minhanh@sky17.local` | Has saved addresses |
-| Customer | `customer.giahuy@sky17.local` | |
+| Customer | `0904000001` (Nguyễn Minh Anh, `/login`) | Has saved addresses. Customers log in with their **phone number** |
+| Customer | `0904000002` (Trần Gia Huy) | |
 
 Demo data includes delivered orders over the last 7 days (dashboards, COD balances) and live orders: one waiting for the store (Pending), one searching for a driver (Confirmed), one with the driver at the store (Vũ Anh) and one being delivered (Lê Hoàng).
 
@@ -52,7 +52,8 @@ Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLO
 | `/seller` | Seller (Owner/Staff) | Dashboard, incoming orders (accept/reject, “Món đã sẵn sàng”, live driver progress), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
 | `/driver` | Driver | Online/offline + GPS heartbeat, ringing 30 s offer popup (accept/decline), trip steps (đến quán → lấy món → đến nơi → giao), cancel trip, failure report, maps & navigation, earnings & COD wallet, trip history, profile |
 | `/admin` | Admin | Live KPIs, orders (filter/paging/timeline/assign/reassign/cancel/failed review/distance override), stores & drivers approval, customers, COD & settlements, users & roles, settings, audit log, notification history |
-| `/Account/*` | All | Login, register (customer/seller/driver), forgot/reset password, change password, logout |
+| `/login` · `/seller/login` · `/driver/login` · `/admin/login` | Per portal | Separate login pages; each accepts only accounts with that role (customers: phone number, partners: e-mail) |
+| `/Account/*` | All | Register (customer/seller/driver), forgot/reset password, change password, logout. `/Account/Login` forwards to the right portal login |
 
 ## Production / Docker
 ```bash
@@ -71,14 +72,14 @@ dotnet ef migrations add <Name> -p src/Sky17.Infrastructure -s src/Sky17.Web -o 
 Migrations are applied automatically at startup (`Database.MigrateAsync`).
 
 ## Tests
-`dotnet test` runs 71 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
+`dotnet test` runs 82 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, phone-number login for customers, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
 
 ## Manual end-to-end test guide
-1. **Admin login** — `/Account/Login` as `admin@sky17.local` → lands on `/admin` with live KPIs.
+1. **Admin login** — `/admin/login` as `admin@sky17.local` (sellers/drivers/customers are refused there) → lands on `/admin` with live KPIs.
 2. **Seller registration** — logout, `/Account/Register?kind=seller`, fill store name/address → lands on `/seller` with “chờ duyệt” banner.
 3. **Admin approves seller** — admin `/admin/stores` → tab *Chờ duyệt* → *Phê duyệt*. The seller receives a realtime notification.
 4. **Seller creates products** — `/seller/products/new`, save, then upload an image (JPG/PNG/WebP ≤ 2 MB). Set store hours in `/seller/store` if needed.
-5. **Customer registration** — `/Account/Register` (Khách hàng).
+5. **Customer registration** — `/Account/Register` (Khách hàng). The **phone number is the login name** (unique, `+84…` accepted and normalized to `0…`); e-mail is only used for password recovery. Log in at `/login` with the phone number.
 6. **Customer order** — open the store, add products, `/cart` → *Tiến hành đặt hàng* → `/checkout` → *Đặt hàng ngay*. Tracking page opens; the seller's dashboard updates in realtime.
 7. **Seller confirms** — `/seller/orders` → *Nhận đơn* (driver search starts at once); later *Món đã sẵn sàng*. The customer page updates live.
 8. **Driver registration & approval** — register with `?kind=driver`; admin `/admin/drivers` → *Duyệt*. The driver turns the online switch on and allows location (or pins a spot in *Hồ sơ & vị trí*).

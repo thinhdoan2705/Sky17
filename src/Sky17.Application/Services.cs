@@ -172,6 +172,11 @@ public interface IAccountService
     Task<RegisterResult> RegisterAsync(RegisterInput input, CancellationToken ct = default);
     /// <summary>Landing URL for the user's primary role after login.</summary>
     Task<string> GetHomeUrlAsync(string userId, CancellationToken ct = default);
+    /// <summary>
+    /// Resolves the login identifier: customers sign in with their phone number; sellers, drivers and admins with e-mail.
+    /// Returns the user name to pass to the sign-in manager, or an error message.
+    /// </summary>
+    Task<LoginLookup> FindLoginAsync(string identifier, CancellationToken ct = default);
 }
 
 /// <summary>Validated image storage for product images.</summary>

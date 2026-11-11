@@ -1,7 +1,12 @@
 @page "/Account/Login"
+@page "/login"
+@page "/admin/login"
+@page "/seller/login"
+@page "/driver/login"
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Sky17.Web.Components.Account
 @inject SignInManager<ApplicationUser> SignInManager
 @inject UserManager<ApplicationUser> UserManager
 @inject IAccountService Accounts
@@ -9,18 +14,35 @@
 @inject IdentityRedirectManager RedirectManager
 @inject IWebHostEnvironment Env
 
-<PageTitle>Đăng nhập | Sky 17</PageTitle>
+<PageTitle>@Portal.Title | Sky 17</PageTitle>
 
-<h1>Đăng nhập</h1>
-<p class="muted">Chào mừng trở lại Ship Hoả Tốc Sky 17.</p>
+<div class="login-portal login-@Portal.Key">
+    <span class="login-portal-icon">@Portal.Icon</span>
+    <div>
+        <h1>@Portal.Title</h1>
+        <p class="muted">@Portal.Subtitle</p>
+    </div>
+</div>
 
 <StatusMessage Message="@errorMessage" />
+@if (wrongPortal is not null)
+{
+    <div class="alert alert-info small">Tài khoản của bạn thuộc <b>@PortalName(wrongPortal)</b>.
+        <a class="link" href="@wrongPortal.Path">Đăng nhập tại @wrongPortal.Path →</a></div>
+}
 <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
     <DataAnnotationsValidator />
     <div class="field">
-        <label for="email">Email</label>
-        <InputText id="email" @bind-Value="Input.Email" autocomplete="username" placeholder="ban@email.com" />
-        <ValidationMessage For="() => Input.Email" />
+        <label for="login">@Portal.IdentifierLabel</label>
+        @if (Portal.UsesPhone)
+        {
+            <InputText id="login" type="tel" @bind-Value="Input.Login" autocomplete="username" inputmode="tel" placeholder="09xxxxxxxx" />
+        }
+        else
+        {
+            <InputText id="login" type="email" @bind-Value="Input.Login" autocomplete="username" inputmode="email" placeholder="ten@vidu.com" />
+        }
+        <ValidationMessage For="() => Input.Login" />
     </div>
     <div class="field">
         <label for="password">Mật khẩu</label>
@@ -33,62 +55,138 @@
 
 <div class="auth-links">
     <a class="link" href="/Account/ForgotPassword">Quên mật khẩu?</a>
-    <a class="link" href="@($"/Account/Register?returnUrl={Uri.EscapeDataString(ReturnUrl ?? "")}")">Tạo tài khoản mới →</a>
+    @if (Portal.RegisterUrl is not null)
+    {
+        <a class="link" href="@Portal.RegisterUrl">@(Portal == LoginPortals.Customer ? "Tạo tài khoản mới →" : "Đăng ký làm đối tác →")</a>
+    }
+</div>
+
+<div class="login-switch">
+    @foreach (var p in LoginPortals.All.Where(p => p != Portal && p != LoginPortals.Admin))
+    {
+        <a href="@p.Path">@p.Icon @(p == LoginPortals.Customer ? "Khách hàng" : p == LoginPortals.Seller ? "Người bán" : "Tài xế")</a>
+    }
 </div>
 
 @if (Env.IsDevelopment())
 {
     <div class="alert alert-info demo-accounts">
         <b>Tài khoản dùng thử (môi trường phát triển)</b> – mật khẩu theo <code>Seed:DemoPassword</code> trong appsettings.Development.json:<br />
-        <code>admin@sky17.local</code> · <code>owner.skycoffee@sky17.local</code> · <code>driver.lehoang@sky17.local</code> · <code>customer.minhanh@sky17.local</code>
+        @foreach (var demo in DemoAccounts) { <code>@demo</code> }
     </div>
 }
 
 @code {
     private string? errorMessage;
+    private LoginPortal? wrongPortal;
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
     [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
 
+    private LoginPortal Portal = LoginPortals.Customer;
+
+    private string[] DemoAccounts => Portal.Key switch
+    {
+        "admin" => ["admin@sky17.local"],
+        "seller" => ["owner.skycoffee@sky17.local", "staff.skycoffee@sky17.local", "owner.bepnhamay@sky17.local"],
+        "driver" => ["driver.minhtri@sky17.local", "driver.lehoang@sky17.local", "driver.vuanh@sky17.local"],
+        _ => ["0904000001", "0904000002"],
+    };
+
     protected override async Task OnInitializedAsync()
     {
         Input ??= new();
+        var path = HttpContext.Request.Path.Value ?? "";
+
+        // The generic /Account/Login (cookie LoginPath) forwards to the portal that owns the return URL.
+        if (path.Equals("/Account/Login", StringComparison.OrdinalIgnoreCase))
+        {
+            RedirectManager.RedirectTo(LoginPortals.LoginUrlFor(LoginPortals.IsSafeLocal(ReturnUrl) ? ReturnUrl : null));
+            return;
+        }
+        Portal = LoginPortals.All.FirstOrDefault(p => path.Equals(p.Path, StringComparison.OrdinalIgnoreCase)) ?? LoginPortals.Customer;
+
         if (HttpMethods.IsGet(HttpContext.Request.Method))
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
     }
 
     public async Task LoginUser()
     {
-        var user = await UserManager.FindByEmailAsync(Input.Email.Trim());
-        if (user is not null && !user.IsActive)
+        const string invalid = "Error: Tài khoản hoặc mật khẩu không đúng.";
+        var login = Input.Login.Trim();
+        if (Portal.UsesPhone && login.Contains('@'))
+        {
+            errorMessage = "Error: Khách hàng vui lòng đăng nhập bằng số điện thoại. Người bán và tài xế chọn trang đăng nhập đối tác bên dưới.";
+            return;
+        }
+        if (!Portal.UsesPhone && !login.Contains('@'))
+        {
+            errorMessage = "Error: Vui lòng đăng nhập bằng email đối tác.";
+            if (PhoneNumbers.Normalize(login) is not null) wrongPortal = LoginPortals.Customer;
+            return;
+        }
+
+        var lookup = await Accounts.FindLoginAsync(login);
+        if (lookup.Error is not null)
+        {
+            errorMessage = "Error: " + lookup.Error;
+            return;
+        }
+        var user = await UserManager.FindByIdAsync(lookup.UserId!);
+        if (user is null)
+        {
+            errorMessage = invalid;
+            return;
+        }
+
+        // Verify the password first (with lockout) so the role check below never leaks which accounts exist.
+        var check = await SignInManager.CheckPasswordSignInAsync(user, Input.Password, lockoutOnFailure: true);
+        if (check.IsLockedOut)
+        {
+            RedirectManager.RedirectTo("Account/Lockout");
+            return;
+        }
+        if (!check.Succeeded)
+        {
+            errorMessage = invalid;
+            return;
+        }
+        if (!user.IsActive)
         {
             errorMessage = "Error: Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.";
             return;
         }
-        var result = await SignInManager.PasswordSignInAsync(Input.Email.Trim(), Input.Password, Input.RememberMe, lockoutOnFailure: true);
-        if (result.Succeeded && user is not null)
+
+        var roles = await UserManager.GetRolesAsync(user);
+        if (!roles.Contains(Portal.Role))
         {
-            Logger.LogInformation("User {UserId} logged in.", user.Id);
-            var target = !string.IsNullOrEmpty(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//") && ReturnUrl != "/"
-                ? ReturnUrl
-                : await Accounts.GetHomeUrlAsync(user.Id);
-            RedirectManager.RedirectTo(target);
+            Logger.LogInformation("User {UserId} tried the {Portal} login without the {Role} role.", user.Id, Portal.Key, Portal.Role);
+            errorMessage = $"Error: Tài khoản này không có quyền truy cập {PortalName(Portal)}.";
+            wrongPortal = LoginPortals.All.FirstOrDefault(p => roles.Contains(p.Role));
+            return;
         }
-        else if (result.IsLockedOut)
-        {
-            RedirectManager.RedirectTo("Account/Lockout");
-        }
-        else
-        {
-            errorMessage = "Error: Email hoặc mật khẩu không đúng.";
-        }
+
+        await SignInManager.SignInAsync(user, Input.RememberMe);
+        Logger.LogInformation("User {UserId} logged in via {Portal}.", user.Id, Portal.Key);
+        var target = LoginPortals.IsSafeLocal(ReturnUrl) && ReturnUrl != "/" && LoginPortals.ForPath(ReturnUrl) == Portal
+            ? ReturnUrl!
+            : Portal.Home;
+        RedirectManager.RedirectTo(target);
     }
+
+    private static string PortalName(LoginPortal p) => p.Key switch
+    {
+        "admin" => "trang quản trị",
+        "seller" => "kênh người bán",
+        "driver" => "ứng dụng tài xế",
+        _ => "trang khách hàng",
+    };
 
     private sealed class InputModel
     {
-        [Required(ErrorMessage = "Vui lòng nhập email"), EmailAddress(ErrorMessage = "Email không hợp lệ")]
-        public string Email { get; set; } = "";
+        [Required(ErrorMessage = "Vui lòng nhập thông tin đăng nhập"), StringLength(256)]
+        public string Login { get; set; } = "";
 
         [Required(ErrorMessage = "Vui lòng nhập mật khẩu"), DataType(DataType.Password)]
         public string Password { get; set; } = "";

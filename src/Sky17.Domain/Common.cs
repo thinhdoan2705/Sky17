@@ -30,6 +30,21 @@ public static class Roles
     public static readonly IReadOnlyList<string> All = [Admin, Seller, Customer, Driver];
 }
 
+/// <summary>Vietnamese phone numbers. Customers use the normalized number as their login name.</summary>
+public static class PhoneNumbers
+{
+    /// <summary>"+84 904 000 001", "84904000001", "0904.000.001" → "0904000001". Returns null when not a valid VN number.</summary>
+    public static string? Normalize(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var digits = new string(input.Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("84") && digits.Length is 11 or 12) digits = "0" + digits[2..];
+        return digits.Length is 10 or 11 && digits[0] == '0' ? digits : null;
+    }
+
+    public static bool LooksLikePhone(string? input) => !string.IsNullOrWhiteSpace(input) && !input.Contains('@') && Normalize(input) is not null;
+}
+
 /// <summary>Business rule violation. Message is safe to show to end users (Vietnamese).</summary>
 public class DomainException(string message) : Exception(message);
 

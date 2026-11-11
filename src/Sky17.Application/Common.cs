@@ -97,3 +97,13 @@ public sealed class NullRoutingService : IRoutingService
 }
 
 public sealed record DeliveryQuoteDto(int? DistanceMeters, long DeliveryFee, long Subtotal, long Total, bool StoreHasLocation);
+
+/// <summary>Validates a Vietnamese phone number (spaces, dots and +84 allowed). Empty values are left to [Required].</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class VnPhoneAttribute : System.ComponentModel.DataAnnotations.ValidationAttribute
+{
+    public VnPhoneAttribute() : base("Số điện thoại không hợp lệ") { }
+
+    public override bool IsValid(object? value) =>
+        value is null || value is string s && (string.IsNullOrWhiteSpace(s) || PhoneNumbers.Normalize(s) is not null);
+}

@@ -488,13 +488,31 @@ public sealed class ProfileService(IDbContextFactory<AppDbContext> dbf, ICurrent
 
     public async Task UpdateMineAsync(ProfileInput input, CancellationToken ct = default)
     {
-        var uid = (await users.GetAsync(ct)).RequireUserId();
+        var me = await users.GetAsync(ct);
+        var uid = me.RequireUserId();
         InputValidation.Validate(input);
         await using var db = await dbf.CreateDbContextAsync(ct);
         var p = await db.UserProfiles.FirstOrDefaultAsync(x => x.UserId == uid, ct);
         if (p is null) db.UserProfiles.Add(p = new UserProfile { UserId = uid, FullName = "" });
         p.FullName = input.FullName.Trim();
-        p.PhoneNumber = input.PhoneNumber.Clean();
+        var phone = PhoneNumbers.Normalize(input.PhoneNumber);
+        if (input.PhoneNumber.Clean() is not null && phone is null) throw new DomainException("Số điện thoại không hợp lệ.");
+
+        // Customer accounts log in with their phone number: keep the login name in sync.
+        var user = await db.Users.FirstAsync(u => u.Id == uid, ct);
+        var phoneLogin = user.UserName is not null && !user.UserName.Contains('@');
+        if (phoneLogin && phone != user.UserName)
+        {
+            if (phone is null) throw new DomainException("Số điện thoại là tên đăng nhập của bạn, không thể để trống.");
+            if (await db.Users.AnyAsync(u => u.NormalizedUserName == phone && u.Id != uid, ct))
+                throw new DomainException("Số điện thoại này đã được tài khoản khác sử dụng.");
+            user.UserName = phone;
+            user.NormalizedUserName = phone.ToUpperInvariant();
+            user.ConcurrencyStamp = Guid.NewGuid().ToString();
+            db.Audit(uid, "Account.LoginPhoneChanged", "User", uid, phone);
+        }
+        user.PhoneNumber = phone;
+        p.PhoneNumber = phone;
         db.Audit(uid, "Profile.Updated", nameof(UserProfile), uid);
         await db.SaveAsync(ct);
     }

@@ -1,9 +1,10 @@
 @inject NavigationManager Nav
+@inject IProfileService Profiles
 
 <AuthorizeView>
     <Authorized>
         <button class="user-btn" aria-label="Tài khoản" @onclick="() => open = !open">
-            <div class="user">@Fmt.Initials(Name ?? context.User.Identity?.Name)</div>
+            <div class="user">@Fmt.Initials(DisplayName ?? context.User.Identity?.Name)</div>
         </button>
         @if (open)
         {
@@ -11,7 +12,7 @@
             <div class="dropdown" style="width:270px">
                 <div class="dropdown-head">
                     <div>
-                        <b>@(Name ?? context.User.Identity?.Name)</b>
+                        <b>@(DisplayName ?? context.User.Identity?.Name)</b>
                         <div class="small muted">@string.Join(" · ", Roles.All.Where(context.User.IsInRole).Select(Labels.RoleText))</div>
                     </div>
                 </div>
@@ -27,7 +28,7 @@
                 <a class="dd-item" href="/Account/Manage/ChangePassword" data-enhance-nav="false">🔑 Đổi mật khẩu</a>
                 <form action="/Account/Logout" method="post" data-enhance="false">
                     <AntiforgeryToken />
-                    <input type="hidden" name="returnUrl" value="/" />
+                    <input type="hidden" name="returnUrl" value="@LogoutReturnUrl" />
                     <button type="submit" class="dd-item danger-text">↩ Đăng xuất</button>
                 </form>
             </div>
@@ -40,14 +41,37 @@
 
 @code {
     [Parameter] public string? Name { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool open;
+    private string? loadedName;
+
+    /// <summary>Full name (customers log in with a phone number, which is not a friendly display name).</summary>
+    private string? DisplayName => Name ?? loadedName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Name is not null || AuthState is null) return;
+        if ((await AuthState).User.Identity?.IsAuthenticated != true) return;
+        try { loadedName = (await Profiles.GetMineAsync()).FullName; }
+        catch (ForbiddenException) { }
+    }
+
+    /// <summary>Partners return to their portal's login page after signing out; customers stay on the home page.</summary>
+    private string LogoutReturnUrl
+    {
+        get
+        {
+            var portal = Sky17.Web.Components.Account.LoginPortals.ForPath("/" + Nav.ToBaseRelativePath(Nav.Uri));
+            return portal == Sky17.Web.Components.Account.LoginPortals.Customer ? "/" : portal.Path;
+        }
+    }
 
     private string LoginUrl
     {
         get
         {
             var path = "/" + Nav.ToBaseRelativePath(Nav.Uri);
-            return "/Account/Login?returnUrl=" + Uri.EscapeDataString(path);
+            return Sky17.Web.Components.Account.LoginPortals.LoginUrlFor(path);
         }
     }
 }

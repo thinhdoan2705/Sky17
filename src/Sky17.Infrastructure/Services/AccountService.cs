@@ -25,12 +25,20 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, App
         if (errors.Count > 0) return new RegisterResult(false, null, errors);
 
         var email = input.Email.Trim();
+        var phone = PhoneNumbers.Normalize(input.PhoneNumber);
+        if (phone is null) return new RegisterResult(false, null, ["Số điện thoại không hợp lệ."]);
+
+        // Customers sign in with their phone number, so it must be unique among login names.
+        var isCustomer = input.Kind == RegistrationKind.Customer;
+        if (isCustomer && await userManager.FindByNameAsync(phone) is not null)
+            return new RegisterResult(false, null, ["Số điện thoại này đã được đăng ký. Vui lòng đăng nhập hoặc dùng số khác."]);
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var user = new ApplicationUser
         {
-            UserName = email,
+            UserName = isCustomer ? phone : email,
             Email = email,
-            PhoneNumber = input.PhoneNumber.Trim(),
+            PhoneNumber = phone,
             // No e-mail provider is configured in the Lite MVP; see DECISIONS.md.
             EmailConfirmed = true,
             IsActive = true,
@@ -49,7 +57,7 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, App
         var roleResult = await userManager.AddToRoleAsync(user, role);
         if (!roleResult.Succeeded) return new RegisterResult(false, null, roleResult.Errors.Select(Translate).ToList());
 
-        db.UserProfiles.Add(new UserProfile { UserId = user.Id, FullName = input.FullName.Trim(), PhoneNumber = input.PhoneNumber.Trim() });
+        db.UserProfiles.Add(new UserProfile { UserId = user.Id, FullName = input.FullName.Trim(), PhoneNumber = phone });
 
         string? adminMessage = null;
         if (input.Kind == RegistrationKind.Seller)
@@ -100,9 +108,37 @@ public sealed class AccountService(UserManager<ApplicationUser> userManager, App
         return "/";
     }
 
+    public async Task<LoginLookup> FindLoginAsync(string identifier, CancellationToken ct = default)
+    {
+        const string invalid = "Tài khoản hoặc mật khẩu không đúng.";
+        identifier = identifier.Trim();
+        if (identifier.Length == 0) return new LoginLookup(null, null, "Vui lòng nhập số điện thoại hoặc email.");
+
+        ApplicationUser? user;
+        if (identifier.Contains('@'))
+        {
+            user = await userManager.FindByEmailAsync(identifier);
+            // Customer-only accounts must use their phone number as the login name.
+            if (user is not null && user.UserName != identifier)
+            {
+                var roles = await userManager.GetRolesAsync(user);
+                if (roles.Count > 0 && roles.All(r => r == Roles.Customer))
+                    return new LoginLookup(null, null, "Tài khoản khách hàng vui lòng đăng nhập bằng số điện thoại.");
+            }
+        }
+        else
+        {
+            var phone = PhoneNumbers.Normalize(identifier);
+            if (phone is null) return new LoginLookup(null, null, "Số điện thoại không hợp lệ.");
+            user = await userManager.FindByNameAsync(phone);
+        }
+        return user is null ? new LoginLookup(null, null, invalid) : new LoginLookup(user.Id, user.UserName, null);
+    }
+
     private static string Translate(IdentityError e) => e.Code switch
     {
-        "DuplicateUserName" or "DuplicateEmail" => "Email này đã được đăng ký.",
+        "DuplicateUserName" => "Tài khoản này đã được đăng ký.",
+        "DuplicateEmail" => "Email này đã được đăng ký.",
         "PasswordTooShort" => "Mật khẩu quá ngắn.",
         "PasswordRequiresDigit" => "Mật khẩu cần ít nhất một chữ số.",
         "PasswordRequiresLower" => "Mật khẩu cần ít nhất một chữ thường.",
