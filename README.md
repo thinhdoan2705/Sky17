@@ -34,17 +34,23 @@ Seeded only when `ASPNETCORE_ENVIRONMENT=Development`. The password is **not in 
 | Driver | `driver.lehoang@sky17.local` | Approved, online |
 | Driver | `driver.vuanh@sky17.local` | Approved, offline |
 | Driver | `driver.anhkhoa@sky17.local` | **Pending approval** |
+| Driver | `driver.minhtri@sky17.local` | Approved, online, **free** ~300 m from Sky Coffee — receives the seeded “đang tìm tài xế” order |
 | Customer | `customer.minhanh@sky17.local` | Has saved addresses |
 | Customer | `customer.giahuy@sky17.local` | |
 
-Demo data includes delivered orders over the last 7 days (dashboards, COD balances) and live orders in Pending / Preparing / ReadyForPickup / Delivering.
+Demo data includes delivered orders over the last 7 days (dashboards, COD balances) and live orders: one waiting for the store (Pending), one searching for a driver (Confirmed), one with the driver at the store (Vũ Anh) and one being delivered (Lê Hoàng).
+
+## Order flow (GrabFood style)
+Customer orders → **store accepts** → the dispatcher immediately offers the order to the **nearest free online driver** (fresh GPS, within radius). The driver gets a **ringing full-screen popup** and has **30 s** to accept; decline/timeout → next nearest driver. Driver steps: *đến quán → lấy món → đến nơi giao → giao & thu COD*. Stores press *Món đã sẵn sàng*; customers see the driver live on the map. Stores that never answer are auto-cancelled; admins are alerted when no driver is found and can assign manually.
+
+Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLOW.md)**.
 
 ## Portals
 | URL | Who | Highlights |
 |---|---|---|
 | `/` | Public / Customer | Home, search, stores, product, cart (single store), checkout (COD), tracking timeline, order history, addresses, profile, notifications |
-| `/seller` | Seller (Owner/Staff) | Dashboard, incoming orders (accept/reject → preparing → ready), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
-| `/driver` | Driver | Online/offline, open jobs, atomic accept, pickup → delivering → delivered/failed, Google Maps navigation, earnings & COD wallet, trip history, profile |
+| `/seller` | Seller (Owner/Staff) | Dashboard, incoming orders (accept/reject, “Món đã sẵn sàng”, live driver progress), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
+| `/driver` | Driver | Online/offline + GPS heartbeat, ringing 30 s offer popup (accept/decline), trip steps (đến quán → lấy món → đến nơi → giao), cancel trip, failure report, maps & navigation, earnings & COD wallet, trip history, profile |
 | `/admin` | Admin | Live KPIs, orders (filter/paging/timeline/assign/reassign/cancel/failed review/distance override), stores & drivers approval, customers, COD & settlements, users & roles, settings, audit log, notification history |
 | `/Account/*` | All | Login, register (customer/seller/driver), forgot/reset password, change password, logout |
 
@@ -65,7 +71,7 @@ dotnet ef migrations add <Name> -p src/Sky17.Infrastructure -s src/Sky17.Web -o 
 Migrations are applied automatically at startup (`Database.MigrateAsync`).
 
 ## Tests
-`dotnet test` runs 56 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, concurrent driver acceptance (5 drivers race, exactly one wins), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
+`dotnet test` runs 71 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
 
 ## Manual end-to-end test guide
 1. **Admin login** — `/Account/Login` as `admin@sky17.local` → lands on `/admin` with live KPIs.
@@ -74,11 +80,11 @@ Migrations are applied automatically at startup (`Database.MigrateAsync`).
 4. **Seller creates products** — `/seller/products/new`, save, then upload an image (JPG/PNG/WebP ≤ 2 MB). Set store hours in `/seller/store` if needed.
 5. **Customer registration** — `/Account/Register` (Khách hàng).
 6. **Customer order** — open the store, add products, `/cart` → *Tiến hành đặt hàng* → `/checkout` → *Đặt hàng ngay*. Tracking page opens; the seller's dashboard updates in realtime.
-7. **Seller confirms** — `/seller/orders` → *Nhận đơn* → *Bắt đầu chuẩn bị* → *Sẵn sàng giao*. The customer timeline updates live.
-8. **Driver registration & approval** — register with `?kind=driver`; admin `/admin/drivers` → *Duyệt*.
-9. **Driver accepts** — driver turns the online switch on, `/driver/jobs` → *Nhận đơn* (try two drivers at once: only one succeeds).
-10. **Pickup** — *Xác nhận lấy hàng* (Google Maps button opens the pickup address).
-11. **Delivery** — *Bắt đầu giao* → *Đã giao & thu …đ* (or *Báo giao thất bại* with a reason → admin resolves in the order page).
+7. **Seller confirms** — `/seller/orders` → *Nhận đơn* (driver search starts at once); later *Món đã sẵn sàng*. The customer page updates live.
+8. **Driver registration & approval** — register with `?kind=driver`; admin `/admin/drivers` → *Duyệt*. The driver turns the online switch on and allows location (or pins a spot in *Hồ sơ & vị trí*).
+9. **Driver accepts** — the nearest free driver’s screen rings with a 30 s popup → *Nhận chuyến* (or *Bỏ qua* / let it expire to see it go to the next driver).
+10. **Pickup** — *Tôi đã đến quán* → *Đã lấy món · Bắt đầu giao* (navigation button opens the map).
+11. **Delivery** — *Tôi đã đến nơi giao* → *Đã giao & thu …đ* (or *Báo giao thất bại* with a reason → admin resolves in the order page).
 12. **COD recorded** — driver `/driver/earnings` shows cash held and amount owed; admin `/admin/finance` → *Giao dịch COD*.
 13. **Admin settlement** — `/admin/finance` → *Công nợ tài xế* → *Lập phiếu* → *Phiếu đối soát* → *Xác nhận*; same for *Thanh toán cửa hàng*. The seller sees it in `/seller/settlements`.
 

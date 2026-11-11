@@ -78,6 +78,7 @@ public interface ISellerService
     Task<PagedResult<OrderSummaryDto>> GetOrdersAsync(int storeId, OrderFilter filter, CancellationToken ct = default);
     Task<OrderDetailDto> GetOrderAsync(int storeId, int orderId, CancellationToken ct = default);
     Task ChangeOrderStatusAsync(int storeId, int orderId, OrderStatus target, string? reason, CancellationToken ct = default);
+    Task MarkFoodReadyAsync(int storeId, int orderId, CancellationToken ct = default);
 
     Task<SalesReportDto> GetSalesReportAsync(int storeId, DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<IReadOnlyList<SettlementDto>> GetSettlementsAsync(int storeId, CancellationToken ct = default);
@@ -93,14 +94,23 @@ public interface IDriverService
     Task UpdateProfileAsync(DriverProfileInput input, CancellationToken ct = default);
     Task SetOnlineAsync(bool online, CancellationToken ct = default);
     Task<DriverDashboardDto> GetDashboardAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<DeliveryJobDto>> GetAvailableJobsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<DeliveryJobDto>> GetMyActiveJobsAsync(CancellationToken ct = default);
     Task<DeliveryJobDto> GetJobAsync(int orderId, CancellationToken ct = default);
-    Task AcceptAsync(int orderId, CancellationToken ct = default);
+    /// <summary>Heartbeat from the driver app while online (GPS or manually pinned position).</summary>
+    Task UpdateLocationAsync(double latitude, double longitude, CancellationToken ct = default);
+    Task<DispatchOfferDto?> GetPendingOfferAsync(CancellationToken ct = default);
+    /// <summary>Accepts the offer; returns the order id.</summary>
+    Task<int> AcceptOfferAsync(int offerId, CancellationToken ct = default);
+    Task DeclineOfferAsync(int offerId, CancellationToken ct = default);
+    Task<DriverOfferStatsDto> GetOfferStatsAsync(CancellationToken ct = default);
+    Task ArriveAtStoreAsync(int orderId, CancellationToken ct = default);
+    /// <summary>Food picked up → Delivering.</summary>
     Task ConfirmPickupAsync(int orderId, CancellationToken ct = default);
-    Task StartDeliveryAsync(int orderId, CancellationToken ct = default);
+    Task ArriveAtCustomerAsync(int orderId, CancellationToken ct = default);
     Task ConfirmDeliveredAsync(int orderId, CancellationToken ct = default);
     Task ReportFailedAsync(int orderId, string reason, CancellationToken ct = default);
+    /// <summary>Driver gives up the trip before pickup; the order goes back to driver search.</summary>
+    Task CancelTripAsync(int orderId, string reason, CancellationToken ct = default);
     Task<PagedResult<DeliveryJobDto>> GetHistoryAsync(int page = 1, int pageSize = 10, CancellationToken ct = default);
     Task<DriverEarningsDto> GetEarningsAsync(CancellationToken ct = default);
 }
@@ -169,4 +179,16 @@ public interface IFileStorage
 {
     Task<string> SaveImageAsync(Stream content, string fileName, string contentType, string folder, CancellationToken ct = default);
     Task DeleteAsync(string url, CancellationToken ct = default);
+}
+
+/// <summary>
+/// GrabFood-style dispatcher: offers each searching order to the nearest free driver, one at a time,
+/// with a timeout; also auto-cancels orders the store never accepted and alerts admins when nobody is found.
+/// </summary>
+public interface IDispatchService
+{
+    /// <summary>Run one dispatch cycle (called every few seconds by a background worker).</summary>
+    Task<DispatchCycleResult> RunCycleAsync(CancellationToken ct = default);
+    /// <summary>Try to offer this order immediately (e.g. right after the store accepted it).</summary>
+    Task DispatchOrderAsync(int orderId, CancellationToken ct = default);
 }

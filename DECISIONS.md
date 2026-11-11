@@ -30,7 +30,7 @@ Client-supplied prices, totals, store ids of products, driver ids, etc. are neve
 ## D5. Order state machine
 `OrderStateMachine` (Domain) is the single table of `(from, to) → allowed actors`. `OrderWorkflow` applies a transition with its side effects (stock restore, assignment close, COD record) and always writes `OrderStatusHistory` + `AuditLog`. UI buttons are derived from `AllowedNextStatuses`, but the server re-validates.
 
-Key rules: customer cancels only while `Pending`; seller rejects in `Pending/Confirmed`; admin may cancel until `Assigned`; after pickup only `DeliveryFailed`, which admin resolves to *retry* (`ReadyForPickup`) or `Returned`. Drivers accept only `ReadyForPickup` orders.
+Key rules (GrabFood flow, see D14): customer cancels only while `Pending`; the system auto-cancels `Pending` orders the store never answered; seller accepts/rejects in `Pending` (and may cancel while still searching); drivers get `Confirmed` orders only through dispatch offers; a driver may cancel the trip before pickup (back to `Confirmed`); admin may cancel until the food is picked up; after pickup only `DeliveryFailed`, which admin resolves to *retry* (`Confirmed`, re-dispatch) or `Returned`.
 
 ## D6. Concurrency & idempotency
 - Stock reservation and driver acceptance are **conditional atomic UPDATEs** (`ExecuteUpdate … WHERE Stock >= qty` / `WHERE Status = ReadyForPickup AND DriverId IS NULL`) inside a transaction; 0 rows affected = lost the race.
@@ -61,6 +61,16 @@ Single SQLite file (`Data/sky17.db`). Schema only via EF Core migrations (`Datab
 
 ## D12. Seeding
 Reference data (roles, rate rule, settings, platform categories) is always ensured. Demo data (stores, users, historical orders) is seeded only when `Seed:DemoData=true` (Development), with the password from configuration (`Seed:DemoPassword`), never from code.
+
+## D14. GrabFood-style dispatch (supersedes the "open jobs" board)
+- **Flow change**: `Pending → Confirmed (store accepted, searching) → Assigned → ArrivedAtStore → Delivering → ArrivedAtCustomer → Delivered`. The old `Preparing`, `ReadyForPickup` and `PickedUp` statuses were removed; migration `GrabDispatchFlow` maps existing rows (2,3 → Confirmed; 5 → Delivering). Kitchen progress is a separate `PreparationState` so driver search starts as soon as the store accepts (as on GrabFood), not when the food is ready.
+- **Push, not pull**: drivers no longer browse/claim open jobs. The dispatcher offers each order to one driver at a time (`DispatchOffer`), nearest free driver first, with a 30 s timeout. Rationale: matches the requested Grab experience and avoids drivers cherry-picking.
+- **"Free" = no active trip**. Admins may still assign manually up to the max-concurrent-trips setting.
+- **Location**: drivers send a heartbeat every 20 s while online (GPS or a manually pinned spot). Positions older than 15 min are ignored, so drivers who closed the app stop receiving offers. Straight-line distance is used only to rank drivers; prices use OSRM road distance (D8).
+- **Timing** relies on `IClock` (tests use a fake clock) and a `BackgroundService` ticking every 3 s; DB filtered unique indexes guarantee one pending offer per order and per driver.
+- **Ringing**: Web Audio tone loop + vibration + Notification API while the web app is open. True push to a locked phone with the app closed needs Web Push or a native app (not built).
+- **Customer privacy**: an offered (not yet accepted) driver sees pickup info and the drop-off *address* but not the customer's name/phone/pin; live driver position is shown to the customer only while that driver works on the order.
+- Full description: [docs/DISPATCH_FLOW.md](docs/DISPATCH_FLOW.md).
 
 ## D13. Rate limiting
 Global limiter: POSTs to `/Account/*` 10/min per IP (credential stuffing); other requests 300/min per IP; Blazor/framework traffic exempt.

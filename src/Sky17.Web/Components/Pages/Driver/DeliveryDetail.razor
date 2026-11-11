@@ -21,10 +21,10 @@ else
         <div class="mb-2">
             <MapView Markers="MapMarkers.ForJob(job)" Route="@job.IsMine" ShowMyLocation="true" Height="300px"
                      EmptyText="Cửa hàng hoặc khách chưa ghim vị trí; dùng nút chỉ đường theo địa chỉ." />
-            @if (!job.IsMine) { <p class="small muted mt-1">Vị trí giao hàng chính xác hiển thị sau khi bạn nhận đơn.</p> }
+            @if (job.IsMine && OrderStateMachine.IsInDelivery(job.Status)) { <p class="small muted mt-1">Bản đồ hiển thị điểm lấy món (🏪) và điểm giao (🏠). Bấm “Vị trí của tôi” để xem bạn đang ở đâu.</p> }
         </div>
         <DeliveryCard Job="job">
-            <DriverJobActions Job="job" CanAccept="true" OnChanged="ReloadAsync" />
+            <DriverJobActions Job="job" OnChanged="ReloadAsync" />
         </DeliveryCard>
         <div class="order-line"><span class="muted">Phí giao hàng (khách trả)</span><span>@Fmt.Vnd(job.DeliveryFee)</span></div>
         <div class="order-line"><span class="muted">Bạn nhận</span><span class="success-text strong">@Fmt.Vnd(job.DriverEarning)</span></div>

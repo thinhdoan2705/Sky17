@@ -1,0 +1,177 @@
+@* Full-screen ringing job offer with countdown (GrabFood style). Lives in the driver layout. *@
+@implements IAsyncDisposable
+@inject IDriverService Drivers
+@inject RealtimeState Realtime
+@inject ToastService Toasts
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@if (offer is not null && Remaining > 0)
+{
+    var pct = Math.Clamp(Remaining / offer.TimeoutSeconds * 100, 0, 100);
+    <div class="offer-backdrop" role="alertdialog" aria-modal="true" aria-label="Lời mời chuyến mới">
+        <div class="offer-card">
+            <div class="offer-head">
+                <div class="offer-timer" style="--pct:@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)">
+                    <span>@Math.Ceiling(Remaining)</span>
+                </div>
+                <div class="grow">
+                    <div class="offer-kicker">🔔 CHUYẾN MỚI · GIAO ĐỒ ĂN</div>
+                    <div class="offer-earning">@Fmt.Vnd(offer.DriverEarning)</div>
+                    <div class="small" style="color:#d7e7ff">Thu nhập của bạn · @offer.ItemCount món · @offer.Code</div>
+                </div>
+            </div>
+            <div class="offer-body">
+                <div class="point">
+                    <span class="point-marker">↑</span>
+                    <div>
+                        <b>@offer.StoreName</b>
+                        <p class="muted small">@offer.PickupAddress</p>
+                        <span class="tag">Cách bạn @Fmt.Distance(offer.DriverDistanceMeters)</span>
+                    </div>
+                </div>
+                <div class="point">
+                    <span class="point-marker">⌖</span>
+                    <div>
+                        <b>Giao đến</b>
+                        <p class="muted small">@offer.DropoffAddress</p>
+                        <span class="tag">Quãng đường giao @Fmt.Distance(offer.TripDistanceMeters)</span>
+                    </div>
+                </div>
+                <div class="row-item">
+                    <span class="grow muted">💵 Thu hộ COD từ khách</span>
+                    <b>@Fmt.Vnd(offer.CodAmount)</b>
+                </div>
+                <div class="offer-actions">
+                    <button class="btn btn-outline" disabled="@busy" @onclick="DeclineAsync">Bỏ qua</button>
+                    <button class="btn btn-green offer-accept" disabled="@busy" @onclick="AcceptAsync">
+                        @if (busy) { <span class="spinner"></span> }
+                        Nhận chuyến
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DispatchOfferDto? offer;
+    private int ringingOfferId;
+    private bool busy;
+    private Timer? timer;
+    private IJSObjectReference? module;
+
+    private double Remaining => offer is null ? 0 : (offer.ExpiresAtUtc - DateTime.UtcNow).TotalSeconds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Realtime.Changed += OnRealtime;
+        await LoadAsync();
+        // Safety net in case a realtime message is missed (e.g. network blip): poll every 5 s.
+        timer = new Timer(_ => InvokeAsync(TickAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private int ticks;
+
+    private async Task TickAsync()
+    {
+        ticks++;
+        if (offer is not null && Remaining <= 0)
+        {
+            offer = null;
+            await StopRingAsync();
+            StateHasChanged();
+        }
+        else if (offer is not null)
+        {
+            StateHasChanged(); // countdown
+        }
+        if (ticks % 5 == 0) await LoadAsync();
+    }
+
+    private Task OnRealtime(RealtimeMessage? m) =>
+        m is null || m.Type is "offer" or "offer_closed" or "order" ? InvokeAsync(LoadAsync) : Task.CompletedTask;
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var next = await Drivers.GetPendingOfferAsync();
+            var changed = next?.OfferId != offer?.OfferId;
+            offer = next;
+            if (changed)
+            {
+                if (offer is not null && offer.OfferId != ringingOfferId)
+                {
+                    ringingOfferId = offer.OfferId;
+                    await RingAsync(offer);
+                }
+                else if (offer is null)
+                {
+                    await StopRingAsync();
+                }
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { offer = null; }
+    }
+
+    private async Task RingAsync(DispatchOfferDto o)
+    {
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/driver.js");
+            await module.InvokeVoidAsync("ring", "🔔 Có chuyến mới - Sky 17", $"{o.StoreName} · {Fmt.Vnd(o.DriverEarning)} · cách {Fmt.Distance(o.DriverDistanceMeters)}");
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException) { }
+    }
+
+    private async Task StopRingAsync()
+    {
+        try { if (module is not null) await module.InvokeVoidAsync("stopRing"); }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+    }
+
+    private async Task AcceptAsync()
+    {
+        if (offer is null || busy) return;
+        busy = true;
+        await StopRingAsync();
+        try
+        {
+            var orderId = await Drivers.AcceptOfferAsync(offer.OfferId);
+            offer = null;
+            Toasts.Success("Đã nhận chuyến! Di chuyển đến quán để lấy món.");
+            await Realtime.RaiseAsync(null);
+            Nav.NavigateTo($"/driver/deliveries/{orderId}");
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException)
+        {
+            offer = null;
+            Toasts.Error(ex.Message);
+        }
+        finally { busy = false; }
+    }
+
+    private async Task DeclineAsync()
+    {
+        if (offer is null || busy) return;
+        busy = true;
+        await StopRingAsync();
+        try
+        {
+            await Drivers.DeclineOfferAsync(offer.OfferId);
+            Toasts.Info("Đã bỏ qua chuyến. Chuyến được chuyển cho tài xế khác.");
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException) { }
+        finally { offer = null; busy = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Realtime.Changed -= OnRealtime;
+        timer?.Dispose();
+        await StopRingAsync();
+        try { if (module is not null) await module.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+}

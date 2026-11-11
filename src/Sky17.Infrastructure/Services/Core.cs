@@ -65,7 +65,19 @@ internal static class Settings
         !string.Equals(await GetAsync(db, SettingKeys.ServiceAvailable, ct), "false", StringComparison.OrdinalIgnoreCase);
 
     public static async Task<int> MaxActiveDeliveriesAsync(AppDbContext db, CancellationToken ct) =>
-        int.TryParse(await GetAsync(db, SettingKeys.MaxActiveDeliveriesPerDriver, ct), out var v) && v > 0 ? v : 2;
+        await IntAsync(db, SettingKeys.MaxActiveDeliveriesPerDriver, 2, ct);
+
+    public static async Task<int> IntAsync(AppDbContext db, string key, int fallback, CancellationToken ct) =>
+        int.TryParse(await GetAsync(db, key, ct), out var v) && v > 0 ? v : fallback;
+
+    public sealed record DispatchSettings(int OfferTimeoutSeconds, int RadiusKm, int LocationFreshMinutes, int StoreConfirmTimeoutMinutes, int NoDriverAlertMinutes);
+
+    public static async Task<DispatchSettings> DispatchAsync(AppDbContext db, CancellationToken ct) => new(
+        await IntAsync(db, SettingKeys.OfferTimeoutSeconds, 30, ct),
+        await IntAsync(db, SettingKeys.DispatchRadiusKm, 20, ct),
+        await IntAsync(db, SettingKeys.LocationFreshMinutes, 15, ct),
+        await IntAsync(db, SettingKeys.StoreConfirmTimeoutMinutes, 10, ct),
+        await IntAsync(db, SettingKeys.NoDriverAlertMinutes, 5, ct));
 
     public static async Task SetAsync(AppDbContext db, string key, string value, string? userId, CancellationToken ct)
     {
@@ -115,20 +127,41 @@ public sealed class OrderWorkflow(IClock clock)
                 if (order.Payment is not null) order.Payment.Status = PaymentStatus.Cancelled;
                 break;
 
-            case OrderStatus.ReadyForPickup when from is OrderStatus.Assigned or OrderStatus.DeliveryFailed:
-                if (actor == OrderActor.Admin && reason is null) throw new DomainException("Vui lòng nhập lý do.");
-                CloseAssignment(active, AssignmentStatus.Released, now, reason);
-                order.DriverId = null;
+            case OrderStatus.Confirmed when from == OrderStatus.Pending:
+                // Store accepted: kitchen starts, driver search starts immediately (GrabFood style).
+                order.ConfirmedAtUtc = now;
+                order.DispatchStartedAtUtc = now;
+                order.DispatchAlertedAtUtc = null;
+                order.PreparationState = PreparationState.Preparing;
                 break;
 
-            case OrderStatus.PickedUp:
-                RequireActive(active).Status = AssignmentStatus.PickedUp;
-                active!.PickedUpAtUtc = now;
+            case OrderStatus.Confirmed:
+                // Back to driver search: driver cancelled the trip, admin unassigned, or failed delivery retried.
+                if (actor != OrderActor.System && reason is null) throw new DomainException("Vui lòng nhập lý do.");
+                CloseAssignment(active, AssignmentStatus.Released, now, reason);
+                order.DriverId = null;
+                order.DispatchStartedAtUtc = now;
+                order.DispatchAlertedAtUtc = null;
+                break;
+
+            case OrderStatus.ArrivedAtStore:
+                RequireActive(active).Status = AssignmentStatus.ArrivedAtStore;
                 break;
 
             case OrderStatus.Delivering:
                 RequireActive(active).Status = AssignmentStatus.Delivering;
-                active!.DeliveringAtUtc = now;
+                active!.PickedUpAtUtc = now;
+                active.DeliveringAtUtc = now;
+                // Picking up implies the food was handed over.
+                if (order.PreparationState != PreparationState.Ready)
+                {
+                    order.PreparationState = PreparationState.Ready;
+                    order.FoodReadyAtUtc ??= now;
+                }
+                break;
+
+            case OrderStatus.ArrivedAtCustomer:
+                RequireActive(active).Status = AssignmentStatus.ArrivedAtCustomer;
                 break;
 
             case OrderStatus.Delivered:
@@ -158,8 +191,12 @@ public sealed class OrderWorkflow(IClock clock)
                 break;
 
             case OrderStatus.Assigned:
-                throw new InvalidOperationException("Use DispatchService for assignments.");
+                throw new InvalidOperationException("Use AssignAsync for assignments.");
         }
+
+        // Any change of hands withdraws a ringing offer.
+        if (to is OrderStatus.Cancelled or OrderStatus.Returned)
+            await WithdrawOffersAsync(db, order.Id, now, ct);
 
         order.Status = to;
         db.OrderStatusHistories.Add(new OrderStatusHistory
@@ -196,17 +233,21 @@ public sealed class OrderWorkflow(IClock clock)
         }
     }
 
+    public static Task WithdrawOffersAsync(AppDbContext db, int orderId, DateTime now, CancellationToken ct) =>
+        db.DispatchOffers.Where(x => x.OrderId == orderId && x.Status == DispatchOfferStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, DispatchOfferStatus.Withdrawn).SetProperty(x => x.RespondedAtUtc, now), ct);
+
     /// <summary>
-    /// Atomically claims a ReadyForPickup order for a driver. Must run inside a transaction.
+    /// Atomically claims a searching (Confirmed, no driver) order for a driver. Must run inside a transaction.
     /// Only one caller can win: the conditional UPDATE matches at most once, and a filtered
     /// unique index allows a single active assignment per order.
     /// </summary>
     public async Task AssignAsync(AppDbContext db, int orderId, string driverId, OrderActor actor, string actingUserId, CancellationToken ct)
     {
-        OrderStateMachine.EnsureCanTransition(OrderStatus.ReadyForPickup, OrderStatus.Assigned, actor);
+        OrderStateMachine.EnsureCanTransition(OrderStatus.Confirmed, OrderStatus.Assigned, actor);
         var now = clock.UtcNow;
         var claimed = await db.Orders
-            .Where(o => o.Id == orderId && o.Status == OrderStatus.ReadyForPickup && o.DriverId == null)
+            .Where(o => o.Id == orderId && o.Status == OrderStatus.Confirmed && o.DriverId == null)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(o => o.Status, OrderStatus.Assigned)
                 .SetProperty(o => o.DriverId, driverId)
@@ -227,12 +268,15 @@ public sealed class OrderWorkflow(IClock clock)
         db.OrderStatusHistories.Add(new OrderStatusHistory
         {
             OrderId = orderId,
-            PreviousStatus = OrderStatus.ReadyForPickup,
+            PreviousStatus = OrderStatus.Confirmed,
             NewStatus = OrderStatus.Assigned,
             ChangedByUserId = actingUserId,
             ChangedAtUtc = now,
-            Reason = actor == OrderActor.Admin ? "Admin phân công tài xế" : "Tài xế nhận đơn",
+            Reason = actor == OrderActor.Admin ? "Admin phân công tài xế" : "Tài xế nhận chuyến",
         });
+        // Other ringing offers for this order (e.g. admin assigned while a popup was open) are withdrawn.
+        await db.DispatchOffers.Where(x => x.OrderId == orderId && x.Status == DispatchOfferStatus.Pending && x.DriverId != driverId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, DispatchOfferStatus.Withdrawn).SetProperty(x => x.RespondedAtUtc, now), ct);
         db.Audit(actingUserId, "Order.Assigned", nameof(Order), orderId, $"driver={driverId}");
         await db.SaveChangesAsync(ct);
     }
@@ -247,10 +291,13 @@ public sealed class OrderWorkflow(IClock clock)
         if (!accountActive) throw new DomainException("Tài khoản tài xế đang bị vô hiệu hóa.");
         if (requireOnline && !profile.IsOnline) throw new DomainException("Bạn cần bật trạng thái trực tuyến để nhận đơn.");
         var max = await Settings.MaxActiveDeliveriesAsync(db, ct);
-        var active = await db.Orders.CountAsync(o => o.DriverId == driverId &&
-            (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.PickedUp || o.Status == OrderStatus.Delivering), ct);
+        var active = await ActiveCountAsync(db, driverId, ct);
         if (active >= max) throw new DomainException($"Tài xế đang có {active} đơn, tối đa {max} đơn cùng lúc.");
     }
+
+    public static Task<int> ActiveCountAsync(AppDbContext db, string driverId, CancellationToken ct) =>
+        db.Orders.CountAsync(o => o.DriverId == driverId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore
+            || o.Status == OrderStatus.Delivering || o.Status == OrderStatus.ArrivedAtCustomer), ct);
 }
 
 internal static class Persist
@@ -296,6 +343,13 @@ public sealed class Notifier(IDbContextFactory<AppDbContext> dbf, IRealtimePubli
         }
     }
 
+    /// <summary>Realtime-only signal (not persisted), e.g. closing an offer popup.</summary>
+    public async Task PushAsync(IReadOnlyCollection<string> userIds, RealtimeMessage message, CancellationToken ct = default)
+    {
+        try { await publisher.PublishAsync(userIds, message, ct); }
+        catch (Exception ex) { logger.LogWarning(ex, "Realtime push failed"); }
+    }
+
     public async Task OrderStatusChangedAsync(int orderId, CancellationToken ct = default)
     {
         try
@@ -322,27 +376,23 @@ public sealed class Notifier(IDbContextFactory<AppDbContext> dbf, IRealtimePubli
                     await NotifyAsync([o.CustomerId], t, "Đặt hàng thành công", $"Đơn {o.Code} đã gửi tới {o.PickupStoreName}.", customerLink, o.Id, ct);
                     break;
                 case OrderStatus.Confirmed:
-                    await NotifyAsync([o.CustomerId], t, "Cửa hàng đã nhận đơn", $"{o.PickupStoreName} đã xác nhận đơn {o.Code}.", customerLink, o.Id, ct);
-                    break;
-                case OrderStatus.Preparing:
-                    await NotifyAsync([o.CustomerId], t, "Đang chuẩn bị món", $"Đơn {o.Code} đang được chuẩn bị.", customerLink, o.Id, ct);
-                    break;
-                case OrderStatus.ReadyForPickup:
-                    await NotifyAsync([o.CustomerId], t, "Sẵn sàng giao", $"Đơn {o.Code} đã sẵn sàng, đang tìm tài xế.", customerLink, o.Id, ct);
-                    var drivers = await db.DriverProfiles.AsNoTracking().Where(d => d.Status == DriverStatus.Active && d.IsOnline).Select(d => d.UserId).ToListAsync(ct);
-                    // Drivers only receive non-personal job info.
-                    await NotifyAsync(drivers, "job", "📦 Có đơn mới cần giao", $"Đơn {o.Code} tại {o.PickupStoreName}.", "/driver/jobs", o.Id, ct);
+                    await NotifyAsync([o.CustomerId], t, "🍳 Cửa hàng đã nhận đơn", $"{o.PickupStoreName} đang chuẩn bị đơn {o.Code}. Đang tìm tài xế gần nhất...", customerLink, o.Id, ct);
                     break;
                 case OrderStatus.Assigned:
-                    await NotifyAsync([o.CustomerId, .. storeUsers], t, "Đã có tài xế", $"Tài xế {driverName} đã nhận đơn {o.Code}.", customerLink, o.Id, ct);
+                    await NotifyAsync([o.CustomerId, .. storeUsers], t, "🛵 Đã tìm thấy tài xế", $"Tài xế {driverName} đang đến {o.PickupStoreName} lấy đơn {o.Code}.", customerLink, o.Id, ct);
                     if (o.DriverId is not null)
-                        await NotifyAsync([o.DriverId], t, "Bạn có đơn giao mới", $"Đơn {o.Code} tại {o.PickupStoreName}.", driverLink, o.Id, ct);
+                        await NotifyAsync([o.DriverId], t, "Bạn có chuyến mới", $"Đến {o.PickupStoreName} lấy đơn {o.Code}.", driverLink, o.Id, ct);
                     break;
-                case OrderStatus.PickedUp:
-                    await NotifyAsync([o.CustomerId, .. storeUsers], t, "Tài xế đã lấy hàng", $"Đơn {o.Code} đã được lấy tại cửa hàng.", customerLink, o.Id, ct);
+                case OrderStatus.ArrivedAtStore:
+                    await NotifyAsync(storeUsers, t, "🛵 Tài xế đã đến quán", $"Tài xế {driverName} đã đến lấy đơn {o.Code}.", sellerLink, o.Id, ct);
+                    await NotifyAsync([o.CustomerId], t, "Tài xế đã đến quán", $"Tài xế {driverName} đang chờ lấy món đơn {o.Code}.", customerLink, o.Id, ct);
                     break;
                 case OrderStatus.Delivering:
-                    await NotifyAsync([o.CustomerId], t, "🛵 Đang giao hàng", $"Đơn {o.Code} đang trên đường tới bạn.", customerLink, o.Id, ct);
+                    await NotifyAsync([o.CustomerId], t, "🛵 Đang giao hàng", $"Tài xế {driverName} đã lấy món và đang trên đường tới bạn.", customerLink, o.Id, ct);
+                    await NotifyAsync(storeUsers, t, "Tài xế đã lấy món", $"Đơn {o.Code} đã rời quán.", sellerLink, o.Id, ct);
+                    break;
+                case OrderStatus.ArrivedAtCustomer:
+                    await NotifyAsync([o.CustomerId], t, "📍 Tài xế đã đến nơi", $"Tài xế {driverName} đã đến, vui lòng ra nhận đơn {o.Code} và chuẩn bị {o.GrandTotal:N0}đ.", customerLink, o.Id, ct);
                     break;
                 case OrderStatus.Delivered:
                     await NotifyAsync([o.CustomerId, .. storeUsers], t, "✅ Giao hàng thành công", $"Đơn {o.Code} đã giao thành công.", customerLink, o.Id, ct);

@@ -29,6 +29,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<DriverProfile> DriverProfiles => Set<DriverProfile>();
     public DbSet<DeliveryAssignment> DeliveryAssignments => Set<DeliveryAssignment>();
     public DbSet<DeliveryRateRule> DeliveryRateRules => Set<DeliveryRateRule>();
+    public DbSet<DispatchOffer> DispatchOffers => Set<DispatchOffer>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<CodTransaction> CodTransactions => Set<CodTransaction>();
     public DbSet<Settlement> Settlements => Set<Settlement>();
@@ -176,6 +177,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             e.HasIndex(x => x.OrderId).IsUnique().HasFilter("\"IsActive\" = 1").HasDatabaseName("IX_DeliveryAssignments_OrderId_Active");
             e.HasIndex(x => new { x.DriverId, x.IsActive });
             e.HasOne(x => x.Order).WithMany(o => o.Assignments).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<DispatchOffer>(e =>
+        {
+            // One pending offer per order and one ringing popup per driver, enforced by the database.
+            e.HasIndex(x => x.OrderId).IsUnique().HasFilter("\"Status\" = 0").HasDatabaseName("IX_DispatchOffers_OrderId_Pending");
+            e.HasIndex(x => x.DriverId).IsUnique().HasFilter("\"Status\" = 0").HasDatabaseName("IX_DispatchOffers_DriverId_Pending");
+            e.HasIndex(x => new { x.OrderId, x.DriverId });
+            e.HasIndex(x => new { x.Status, x.ExpiresAtUtc });
+            e.HasOne(x => x.Order).WithMany(o => o.Offers).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.DriverId).OnDelete(DeleteBehavior.Restrict);
         });
 

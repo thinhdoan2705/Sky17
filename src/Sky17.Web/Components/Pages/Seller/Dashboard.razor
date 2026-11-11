@@ -30,6 +30,10 @@
                         @if (Next(o.Status) is { } next)
                         {
                             <button class="btn btn-soft btn-sm" disabled="@Busy" @onclick="() => Advance(o.Id, next)">@next.ActionText()</button>
+                            }
+                            else if (OrderStateMachine.IsKitchenOpen(o.Status) && o.PreparationState != PreparationState.Ready)
+                            {
+                            <button class="btn btn-orange btn-sm" disabled="@Busy" @onclick="() => FoodReady(o.Id)">🍱 Món đã sẵn sàng</button>
                         }
                     </div>
                 }
@@ -73,10 +77,10 @@
     private static OrderStatus? Next(OrderStatus s) => s switch
     {
         OrderStatus.Pending => OrderStatus.Confirmed,
-        OrderStatus.Confirmed => OrderStatus.Preparing,
-        OrderStatus.Preparing => OrderStatus.ReadyForPickup,
         _ => null,
     };
+
+    private Task FoodReady(int orderId) => RunAsync(() => Seller.MarkFoodReadyAsync(StoreId, orderId), "Đã báo tài xế: món đã sẵn sàng");
 
     private Task Advance(int orderId, OrderStatus target) =>
         RunAsync(() => Seller.ChangeOrderStatusAsync(StoreId, orderId, target, null), $"Đã cập nhật: {target.Text()}");

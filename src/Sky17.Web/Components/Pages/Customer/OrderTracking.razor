@@ -28,6 +28,21 @@ else
     @if (order.Status == OrderStatus.Cancelled) { <div class="alert alert-danger">Đơn đã hủy: @order.CancelReason</div> }
     @if (order.Status == OrderStatus.DeliveryFailed) { <div class="alert alert-danger">Giao hàng chưa thành công: @order.FailureReason. Bộ phận vận hành sẽ liên hệ bạn.</div> }
 
+    @if (!OrderStateMachine.IsTerminal(order.Status) && order.Status != OrderStatus.DeliveryFailed)
+    {
+        <div class="card mb-2 searching" style="background:linear-gradient(110deg,#eaf2ff,#fff)">
+            <div class="radar">@StatusEmoji</div>
+            <div class="grow">
+                <h2 style="margin:0 0 4px">@StatusHeadline</h2>
+                <div class="muted">@StatusSub</div>
+                @if (OrderStateMachine.IsKitchenOpen(order.Status))
+                {
+                    <span class="kitchen-badge mt-1 @(order.PreparationState == PreparationState.Ready ? "ready" : "")">@order.PreparationState.Text()</span>
+                }
+            </div>
+        </div>
+    }
+
     <div class="grid-2">
         <div class="stack">
             <section class="card">
@@ -68,7 +83,7 @@ else
                 }
                 else
                 {
-                    <p class="muted mb-0">@(order.Status == OrderStatus.ReadyForPickup ? "Đang tìm tài xế gần bạn..." : "Chưa có tài xế.")</p>
+                    <p class="muted mb-0">@(order.IsSearchingDriver ? "🔎 Đang tìm tài xế gần quán nhất..." : "Chưa có tài xế.")</p>
                 }
             </section>
         </div>
@@ -86,6 +101,49 @@ else
     private static readonly string[] cancelReasons = ["Đặt nhầm món", "Muốn đổi địa chỉ", "Thời gian chờ quá lâu"];
 
     protected override async Task LoadAsync() => order = await Orders.GetMyOrderAsync(Code);
+
+    private Timer? refresh;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // Live driver position: refresh every 15 s while a driver is on the way.
+        refresh = new Timer(_ => InvokeAsync(async () =>
+        {
+            if (order is not null && OrderStateMachine.IsInDelivery(order.Status)) { await ReloadAsync(); StateHasChanged(); }
+        }), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    public override void Dispose()
+    {
+        refresh?.Dispose();
+        base.Dispose();
+    }
+
+    private string StatusEmoji => order!.Status switch
+    {
+        OrderStatus.Pending => "🏪", OrderStatus.Confirmed => "🔎", OrderStatus.ArrivedAtStore => "🍱",
+        OrderStatus.ArrivedAtCustomer => "📍", _ => "🛵",
+    };
+
+    private string StatusHeadline => order!.Status switch
+    {
+        OrderStatus.Pending => "Đang chờ quán xác nhận",
+        OrderStatus.Confirmed => "Quán đang chuẩn bị · đang tìm tài xế",
+        OrderStatus.Assigned => $"Tài xế {order.DriverName} đang đến quán",
+        OrderStatus.ArrivedAtStore => $"Tài xế {order.DriverName} đang lấy món",
+        OrderStatus.Delivering => $"Tài xế {order.DriverName} đang giao đến bạn",
+        OrderStatus.ArrivedAtCustomer => "Tài xế đã đến! Vui lòng ra nhận hàng",
+        _ => order.Status.Text(),
+    };
+
+    private string StatusSub => order!.Status switch
+    {
+        OrderStatus.Pending => $"{order.StoreName} sẽ xác nhận trong vài phút.",
+        OrderStatus.Confirmed => "Hệ thống đang gửi đơn cho tài xế rảnh gần quán nhất.",
+        OrderStatus.ArrivedAtCustomer => $"Chuẩn bị {Fmt.Vnd(order.GrandTotal)} tiền mặt để thanh toán.",
+        _ => $"{order.DriverPlate} · cập nhật {Fmt.Ago(order.DriverLocationAtUtc ?? DateTime.UtcNow)}",
+    };
 
     private Task CancelAsync(string reason) => RunAsync(async () =>
     {

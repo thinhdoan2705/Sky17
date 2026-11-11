@@ -1,8 +1,9 @@
 @inherits LayoutComponentBase
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IDriverService Drivers
 @inject RealtimeState Realtime
 @inject ToastService Toasts
+@inject IJSRuntime JS
 
 <div class="driver-shell">
     <div class="driver-top">
@@ -10,35 +11,57 @@
         <div style="display:flex;align-items:center;gap:11px">
             @if (profile is not null)
             {
-                <span class="small muted">@(profile.IsOnline ? "Đang hoạt động" : "Đang offline")</span>
-                <button aria-label="Bật hoặc tắt nhận đơn" class="switch @(profile.IsOnline ? "on" : "")" disabled="@(busy || profile.Status != DriverStatus.Active)" @onclick="ToggleAsync"></button>
+                <span class="small muted">@(profile.IsOnline ? "Đang nhận chuyến" : "Đang offline")</span>
+                <button aria-label="Bật hoặc tắt nhận chuyến" class="switch @(profile.IsOnline ? "on" : "")" disabled="@(busy || profile.Status != DriverStatus.Active)" @onclick="ToggleAsync"></button>
             }
             <NotificationBell />
             <UserMenu Name="@profile?.FullName" />
         </div>
     </div>
+    @if (profile is { IsOnline: true })
+    {
+        <div class="gps-bar @(locationError is null ? "" : "gps-bad")">
+            @if (locationError is not null)
+            {
+                <span>⚠️ @locationError</span> <a class="link" href="/driver/profile#vi-tri">Ghim vị trí thủ công →</a>
+            }
+            else if (mode == "manual")
+            {
+                <span>📍 Đang dùng vị trí ghim thủ công · cập nhật @(lastSent is null ? "—" : Fmt.Ago(lastSent.Value))</span> <a class="link" href="/driver/profile#vi-tri">Đổi</a>
+            }
+            else
+            {
+                <span>🛰️ GPS @(lastSent is null ? "đang xác định vị trí..." : $"đã cập nhật {Fmt.Ago(lastSent.Value)}")</span>
+            }
+        </div>
+    }
     <nav class="driver-nav">
         <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active">⌂ Tổng quan</NavLink>
-        <NavLink href="/driver/jobs" ActiveClass="active">📦 Đơn đang mở</NavLink>
         <NavLink href="/driver/history" ActiveClass="active">▤ Lịch sử chuyến</NavLink>
         <NavLink href="/driver/earnings" ActiveClass="active">◉ Thu nhập & COD</NavLink>
-        <NavLink href="/driver/profile" ActiveClass="active">☻ Hồ sơ</NavLink>
+        <NavLink href="/driver/profile" ActiveClass="active">☻ Hồ sơ & vị trí</NavLink>
     </nav>
     @Body
 </div>
 <nav class="mobile-tabs" aria-label="Điều hướng tài xế">
     <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active"><span>⌂</span>Tổng quan</NavLink>
-    <NavLink href="/driver/jobs" ActiveClass="active"><span>📦</span>Đơn mở</NavLink>
     <NavLink href="/driver/history" ActiveClass="active"><span>▤</span>Lịch sử</NavLink>
     <NavLink href="/driver/earnings" ActiveClass="active"><span>◉</span>Thu nhập</NavLink>
     <NavLink href="/driver/profile" ActiveClass="active"><span>☻</span>Hồ sơ</NavLink>
 </nav>
+<DriverOfferPopup />
 <ToastHost />
 <RealtimeListener />
 
 @code {
     private DriverProfileDto? profile;
     private bool busy;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<DriverLayout>? self;
+    private string mode = "gps";
+    private string? locationError;
+    private DateTime? lastSent;
+    private bool tracking;
 
     protected override async Task OnInitializedAsync()
     {
@@ -46,12 +69,75 @@
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try { profile = await Drivers.GetProfileAsync(); } catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { profile = null; }
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/driver.js");
+            self = DotNetObjectReference.Create(this);
+            mode = await module.InvokeAsync<string>("getMode");
+            await SyncTrackingAsync();
+        }
+        catch (JSDisconnectedException) { }
     }
 
-    private Task OnRealtime(RealtimeMessage? m) => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    private async Task LoadAsync()
+    {
+        try { profile = await Drivers.GetProfileAsync(); }
+        catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { profile = null; }
+    }
+
+    private Task OnRealtime(RealtimeMessage? m) => InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        if (module is not null)
+        {
+            mode = await module.InvokeAsync<string>("getMode");
+            await SyncTrackingAsync(force: m is null);
+        }
+        StateHasChanged();
+    });
+
+    /// <summary>Location heartbeats run only while online.</summary>
+    private async Task SyncTrackingAsync(bool force = false)
+    {
+        if (module is null || self is null) return;
+        var shouldTrack = profile is { IsOnline: true, Status: DriverStatus.Active };
+        if (shouldTrack && (!tracking || force))
+        {
+            locationError = null;
+            await module.InvokeVoidAsync("startTracking", self, mode, profile!.LastLatitude, profile.LastLongitude);
+            tracking = true;
+        }
+        else if (!shouldTrack && tracking)
+        {
+            await module.InvokeVoidAsync("stopTracking");
+            tracking = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnLocation(double lat, double lng, double accuracy)
+    {
+        try
+        {
+            await Drivers.UpdateLocationAsync(lat, lng);
+            lastSent = DateTime.UtcNow;
+            locationError = null;
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException) { locationError = ex.Message; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnLocationError(string code)
+    {
+        locationError = code == "denied"
+            ? "Bạn chưa cho phép truy cập vị trí nên hệ thống không thể gửi chuyến gần bạn."
+            : "Không lấy được vị trí GPS (cần HTTPS hoặc thiết bị có GPS).";
+        return InvokeAsync(StateHasChanged);
+    }
 
     private async Task ToggleAsync()
     {
@@ -59,13 +145,28 @@
         busy = true;
         try
         {
+            // User gesture: unlock sound + ask notification permission so offers can ring.
+            if (module is not null && !profile.IsOnline) await module.InvokeVoidAsync("unlock");
             await Drivers.SetOnlineAsync(!profile.IsOnline);
-            Toasts.Success(!profile.IsOnline ? "Bạn đã bật nhận đơn" : "Bạn đã tắt nhận đơn");
+            Toasts.Success(!profile.IsOnline ? "Bạn đã bật nhận chuyến. Hệ thống sẽ gửi chuyến gần bạn nhất." : "Bạn đã tắt nhận chuyến");
             await Realtime.RaiseAsync(null);
         }
         catch (DomainException ex) { Toasts.Error(ex.Message); }
         finally { busy = false; }
     }
 
-    public void Dispose() => Realtime.Changed -= OnRealtime;
+    public async ValueTask DisposeAsync()
+    {
+        Realtime.Changed -= OnRealtime;
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("stopTracking");
+                await module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        self?.Dispose();
+    }
 }

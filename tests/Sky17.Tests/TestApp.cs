@@ -37,6 +37,8 @@ public sealed class TestApp : IAsyncDisposable
         var cs = $"Data Source={Path.Combine(dir, "test.db")};Default Timeout=30";
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<FakeClock>();
+        services.AddSingleton<IClock>(sp => sp.GetRequiredService<FakeClock>());
         services.AddSingleton<FakeRoutingService>();
         services.AddSingleton<IRoutingService>(sp => sp.GetRequiredService<FakeRoutingService>());
         services.AddSky17Infrastructure(cs, Path.Combine(dir, "wwwroot"));
@@ -100,16 +102,52 @@ public sealed class TestApp : IAsyncDisposable
         return (owner, store.Id, a.Id, b.Id);
     }
 
-    public async Task<TestUser> CreateDriverAsync(string name, bool approved = true, bool online = true)
+    /// <summary>Store pin used by <see cref="CreateStoreAsync"/>.</summary>
+    public static readonly GeoPoint StorePoint = new(10.9804, 106.6531);
+
+    /// <summary>Driver with a fresh GPS position <paramref name="metersNorth"/> meters north of the test store.</summary>
+    public async Task<TestUser> CreateDriverAsync(string name, bool approved = true, bool online = true, int metersNorth = 300, bool freshLocation = true)
     {
         var u = await CreateUserAsync(name, Roles.Driver);
         await using var db = Db();
-        db.DriverProfiles.Add(new DriverProfile { UserId = u.Id, LicensePlate = "59X1-" + Random.Shared.Next(10000, 99999), Status = approved ? DriverStatus.Active : DriverStatus.PendingApproval, IsOnline = online });
+        db.DriverProfiles.Add(new DriverProfile
+        {
+            UserId = u.Id, LicensePlate = "59X1-" + Random.Shared.Next(10000, 99999),
+            Status = approved ? DriverStatus.Active : DriverStatus.PendingApproval, IsOnline = online,
+            LastLatitude = StorePoint.Latitude + metersNorth / 111_320.0, LastLongitude = StorePoint.Longitude,
+            LastLocationAtUtc = freshLocation ? Clock.UtcNow : Clock.UtcNow.AddHours(-2),
+        });
         await db.SaveChangesAsync();
         return u;
     }
 
-    /// <summary>Customer places an order and the seller moves it to ReadyForPickup.</summary>
+    public FakeClock Clock => Services.GetRequiredService<FakeClock>();
+    public IDispatchService Dispatch => Services.GetRequiredService<IDispatchService>();
+
+    /// <summary>Runs dispatch; the driver must receive the offer for this order and accepts it.</summary>
+    public async Task AcceptViaDispatchAsync(TestUser driver, int orderId)
+    {
+        await Dispatch.RunCycleAsync();
+        using var d = As(driver);
+        var svc = d.Get<IDriverService>();
+        var offer = await svc.GetPendingOfferAsync();
+        Assert.NotNull(offer);
+        Assert.Equal(orderId, offer.OrderId);
+        Assert.Equal(orderId, await svc.AcceptOfferAsync(offer.OfferId));
+    }
+
+    /// <summary>Arrive at store → pick up → arrive at customer → delivered.</summary>
+    public async Task CompleteTripAsync(TestUser driver, int orderId)
+    {
+        using var d = As(driver);
+        var svc = d.Get<IDriverService>();
+        await svc.ArriveAtStoreAsync(orderId);
+        await svc.ConfirmPickupAsync(orderId);
+        await svc.ArriveAtCustomerAsync(orderId);
+        await svc.ConfirmDeliveredAsync(orderId);
+    }
+
+    /// <summary>Customer places an order and the store accepts it (order is now searching for a driver).</summary>
     public async Task<(TestUser Customer, int StoreId, TestUser Owner, PlaceOrderResult Order)> CreateReadyOrderAsync()
     {
         var (owner, storeId, pa, pb) = await CreateStoreAsync();
@@ -125,8 +163,6 @@ public sealed class TestApp : IAsyncDisposable
         {
             var seller = s.Get<ISellerService>();
             await seller.ChangeOrderStatusAsync(storeId, placed.OrderId, OrderStatus.Confirmed, null);
-            await seller.ChangeOrderStatusAsync(storeId, placed.OrderId, OrderStatus.Preparing, null);
-            await seller.ChangeOrderStatusAsync(storeId, placed.OrderId, OrderStatus.ReadyForPickup, null);
         }
         return (customer, storeId, owner, placed);
     }
@@ -166,4 +202,12 @@ public sealed class FakeRoutingService : IRoutingService
         Calls++;
         return Task.FromResult(DistanceMeters);
     }
+}
+
+/// <summary>Real time plus a controllable offset (to simulate offer timeouts).</summary>
+public sealed class FakeClock : IClock
+{
+    public TimeSpan Offset { get; set; }
+    public DateTime UtcNow => DateTime.UtcNow + Offset;
+    public void Advance(TimeSpan by) => Offset += by;
 }

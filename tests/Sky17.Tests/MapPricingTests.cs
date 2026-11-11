@@ -99,17 +99,17 @@ public class MapPricingTests
             await c.Get<ICartService>().AddAsync(pa, 1);
             placed = await c.Get<ICustomerOrderService>().PlaceOrderAsync(PinnedCheckout());
         }
-        await using (var db = app.Db())
-        {
-            await db.Orders.Where(o => o.Id == placed.OrderId).ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, OrderStatus.ReadyForPickup));
-        }
         var driver = await app.CreateDriverAsync("D");
+        using (var s = app.As((await app.Db().StoreMembers.FirstAsync(m => m.StoreId == storeId)).UserId, Roles.Seller))
+            await s.Get<ISellerService>().ChangeOrderStatusAsync(storeId, placed.OrderId, OrderStatus.Confirmed, null);
         using var d = app.As(driver);
         var svc = d.Get<IDriverService>();
-        var open = (await svc.GetAvailableJobsAsync()).Single();
-        Assert.NotNull(open.PickupLatitude);
-        Assert.Null(open.DropoffLatitude);
-        await svc.AcceptAsync(placed.OrderId);
+        var offer = await svc.GetPendingOfferAsync();
+        Assert.NotNull(offer);
+        var preview = await svc.GetJobAsync(placed.OrderId);
+        Assert.NotNull(preview.PickupLatitude);
+        Assert.Null(preview.DropoffLatitude); // exact drop-off point hidden until accepted
+        await svc.AcceptOfferAsync(offer.OfferId);
         var mine = await svc.GetJobAsync(placed.OrderId);
         Assert.Equal(10.9757, mine.DropoffLatitude);
     }

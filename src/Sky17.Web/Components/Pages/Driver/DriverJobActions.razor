@@ -1,64 +1,63 @@
-@* All driver actions for one delivery. Server enforces state machine + ownership; buttons only reflect it. *@
+@* One big primary action per trip step (GrabFood style). Server enforces state machine + ownership. *@
 @inject IDriverService Drivers
 @inject ToastService Toasts
-@inject NavigationManager Nav
 
-@if (!Job.IsMine && Job.Status == OrderStatus.ReadyForPickup)
+@if (Job.IsMine)
 {
-    <button class="btn" disabled="@(busy || !CanAccept)" @onclick="Accept">✋ Nhận đơn</button>
-    <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.PickupAddress)" target="_blank" rel="noopener">🗺️ Đường tới cửa hàng</a>
-}
-else if (Job.IsMine)
-{
-    @switch (Job.Status)
-    {
-        case OrderStatus.Assigned:
-            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.PickupAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường lấy hàng</a>
-            <button class="btn" disabled="@busy" @onclick="Pickup">📦 Xác nhận lấy hàng</button>
-            break;
-        case OrderStatus.PickedUp:
-            <button class="btn btn-orange" disabled="@busy" @onclick="Start">🛵 Bắt đầu giao</button>
-            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.DropoffAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường tới khách</a>
-            <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
-            break;
-        case OrderStatus.Delivering:
-            <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.DropoffAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường tới khách</a>
-            <button class="btn btn-green" disabled="@busy" @onclick="() => delivering = true">✅ Đã giao & thu @Fmt.Vnd(Job.CodAmount)</button>
-            <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
-            break;
-    }
-}
-@if (ShowDetailLink)
-{
-    <a class="btn btn-soft" href="/driver/deliveries/@Job.OrderId">Chi tiết</a>
+    <div class="step-actions">
+        @switch (Job.Status)
+        {
+            case OrderStatus.Assigned:
+                <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.PickupAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường đến quán</a>
+                <button class="btn btn-lg" disabled="@busy" @onclick="Arrive">🏪 Tôi đã đến quán</button>
+                <button class="btn btn-ghost danger-text" @onclick="() => cancelling = true">Hủy chuyến</button>
+                break;
+            case OrderStatus.ArrivedAtStore:
+                <span class="kitchen-badge @(Job.PreparationState == PreparationState.Ready ? "ready" : "")">
+                    @(Job.PreparationState == PreparationState.Ready ? "🍱 Quán báo món đã sẵn sàng" : "🍳 Quán đang chuẩn bị món, vui lòng chờ")
+                </span>
+                <button class="btn btn-lg btn-orange" disabled="@busy" @onclick="Pickup">📦 Đã lấy món · Bắt đầu giao</button>
+                <button class="btn btn-ghost danger-text" @onclick="() => cancelling = true">Hủy chuyến</button>
+                break;
+            case OrderStatus.Delivering:
+                <a class="btn btn-outline" href="@Fmt.MapsUrl(Job.DropoffAddress)" target="_blank" rel="noopener">🗺️ Chỉ đường đến khách</a>
+                @if (Job.CustomerPhone is not null) { <a class="btn btn-soft" href="@Fmt.Tel(Job.CustomerPhone)">📞 Gọi khách</a> }
+                <button class="btn btn-lg" disabled="@busy" @onclick="ArriveCustomer">📍 Tôi đã đến nơi giao</button>
+                <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
+                break;
+            case OrderStatus.ArrivedAtCustomer:
+                @if (Job.CustomerPhone is not null) { <a class="btn btn-soft" href="@Fmt.Tel(Job.CustomerPhone)">📞 Gọi khách ra nhận</a> }
+                <button class="btn btn-lg btn-green" disabled="@busy" @onclick="() => delivering = true">✅ Đã giao & thu @Fmt.Vnd(Job.CodAmount)</button>
+                <button class="btn btn-ghost danger-text" @onclick="() => failing = true">Báo giao thất bại</button>
+                break;
+        }
+        @if (ShowDetailLink) { <a class="btn btn-soft" href="/driver/deliveries/@Job.OrderId">Xem chi tiết chuyến</a> }
+    </div>
 }
 
 <ConfirmDialog @bind-Open="delivering" Title="Xác nhận giao thành công" ConfirmText="Đã giao và thu tiền" Busy="busy"
                Message="@($"Xác nhận bạn đã giao đơn {Job.Code} và thu đủ {Fmt.Vnd(Job.CodAmount)} tiền mặt từ khách.")"
                OnConfirm="Delivered" />
 <ConfirmDialog @bind-Open="failing" Title="Báo giao hàng thất bại" ConfirmText="Gửi báo cáo" Danger="true" Busy="busy" AskReason="true"
-               Message="Đơn sẽ được chuyển cho bộ phận vận hành xử lý." Presets="failReasons"
-               OnConfirm="Failed" />
+               Message="Đơn sẽ được chuyển cho bộ phận vận hành xử lý." Presets="failReasons" OnConfirm="Failed" />
+<ConfirmDialog @bind-Open="cancelling" Title="Hủy chuyến" ConfirmText="Hủy chuyến" Danger="true" Busy="busy" AskReason="true"
+               Message="Chuyến sẽ được chuyển cho tài xế khác. Hủy chuyến thường xuyên ảnh hưởng tỷ lệ nhận chuyến của bạn." Presets="cancelReasons" OnConfirm="CancelTrip" />
 
 @code {
     [Parameter, EditorRequired] public DeliveryJobDto Job { get; set; } = default!;
-    [Parameter] public bool CanAccept { get; set; } = true;
     [Parameter] public bool ShowDetailLink { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 
-    private bool busy, delivering, failing;
+    private bool busy, delivering, failing, cancelling;
     private static readonly string[] failReasons = ["Không liên lạc được khách", "Sai địa chỉ", "Khách từ chối nhận", "Sự cố phương tiện"];
+    private static readonly string[] cancelReasons = ["Xe hỏng", "Quán chờ quá lâu", "Quán đóng cửa / hết món", "Lý do cá nhân"];
 
-    private Task Pickup() => Do(() => Drivers.ConfirmPickupAsync(Job.OrderId), "Đã xác nhận lấy hàng");
-    private Task Start() => Do(() => Drivers.StartDeliveryAsync(Job.OrderId), "Bắt đầu giao hàng");
+    private Task Arrive() => Do(() => Drivers.ArriveAtStoreAsync(Job.OrderId), "Đã báo đến quán. Nhận món rồi bấm “Đã lấy món”.");
+    private Task Pickup() => Do(() => Drivers.ConfirmPickupAsync(Job.OrderId), "Bắt đầu giao hàng. Chúc bạn thượng lộ bình an!");
+    private Task ArriveCustomer() => Do(() => Drivers.ArriveAtCustomerAsync(Job.OrderId), "Đã báo khách bạn đến nơi.");
     private Task Delivered(string _) => Do(() => Drivers.ConfirmDeliveredAsync(Job.OrderId), "Giao hàng thành công! COD đã được ghi nhận.");
     private Task Failed(string reason) => Do(() => Drivers.ReportFailedAsync(Job.OrderId, reason), "Đã báo giao thất bại");
-
-    private Task Accept() => Do(async () =>
-    {
-        await Drivers.AcceptAsync(Job.OrderId);
-        Nav.NavigateTo($"/driver/deliveries/{Job.OrderId}");
-    }, "Nhận đơn thành công!");
+    private Task CancelTrip(string reason) => Do(() => Drivers.CancelTripAsync(Job.OrderId, reason), "Đã hủy chuyến");
 
     private async Task Do(Func<Task> action, string success)
     {
@@ -67,7 +66,7 @@ else if (Job.IsMine)
         try
         {
             await action();
-            delivering = failing = false;
+            delivering = failing = cancelling = false;
             Toasts.Success(success);
             await OnChanged.InvokeAsync();
         }

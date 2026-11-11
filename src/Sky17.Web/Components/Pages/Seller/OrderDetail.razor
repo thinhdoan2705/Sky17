@@ -11,6 +11,11 @@
         <PageHeader Title="@($"Đơn {order.Code}")" Subtitle="@($"Đặt lúc {Fmt.Time(order.PlacedAtUtc)}")">
             <Actions>
                 <OrderStatusBadge Status="order.Status" />
+                @if (OrderStateMachine.IsKitchenOpen(order.Status))
+                {
+                    @if (order.PreparationState == PreparationState.Ready) { <span class="kitchen-badge ready">🍱 Đã báo món sẵn sàng</span> }
+                    else { <button class="btn btn-orange" disabled="@Busy" @onclick="FoodReady">🍱 Món đã sẵn sàng</button> }
+                }
                 @foreach (var s in order.AllowedNextStatuses.Where(s => s != OrderStatus.Cancelled))
                 {
                     <button class="btn" disabled="@Busy" @onclick="() => Move(s)">@s.ActionText()</button>
@@ -41,7 +46,7 @@
                         <p class="mb-0"><b>@order.DriverName</b> · @order.DriverPlate</p>
                         @if (OrderStateMachine.IsInDelivery(order.Status)) { <a class="link" href="@Fmt.Tel(order.DriverPhone)">📞 @order.DriverPhone</a> }
                     }
-                    else { <p class="muted mb-0">@(order.Status == OrderStatus.ReadyForPickup ? "Đang chờ tài xế nhận đơn." : "Chưa phân công.")</p> }
+                    else { <p class="muted mb-0">@(order.Status == OrderStatus.Confirmed ? "🔎 Hệ thống đang tìm tài xế gần quán nhất..." : "Chưa có tài xế.")</p> }
                 </section>
                 <section class="card">
                     <h2>Lịch sử trạng thái</h2>
@@ -68,6 +73,8 @@
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => m is null || m.OrderId == Id;
+
+    private Task FoodReady() => RunAsync(() => Seller.MarkFoodReadyAsync(StoreId, Id), "Đã báo tài xế: món đã sẵn sàng");
 
     private Task Move(OrderStatus target) => RunAsync(() => Seller.ChangeOrderStatusAsync(StoreId, Id, target, null), $"Đã cập nhật: {target.Text()}");
 

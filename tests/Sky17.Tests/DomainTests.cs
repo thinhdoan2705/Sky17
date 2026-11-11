@@ -7,26 +7,31 @@ public class OrderStateMachineTests
     [Theory]
     [InlineData(OrderStatus.Pending, OrderStatus.Confirmed, OrderActor.Seller)]
     [InlineData(OrderStatus.Pending, OrderStatus.Cancelled, OrderActor.Customer)]
-    [InlineData(OrderStatus.Confirmed, OrderStatus.Preparing, OrderActor.Seller)]
-    [InlineData(OrderStatus.Preparing, OrderStatus.ReadyForPickup, OrderActor.Seller)]
-    [InlineData(OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderActor.Driver)]
-    [InlineData(OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderActor.Admin)]
-    [InlineData(OrderStatus.Assigned, OrderStatus.PickedUp, OrderActor.Driver)]
-    [InlineData(OrderStatus.PickedUp, OrderStatus.Delivering, OrderActor.Driver)]
-    [InlineData(OrderStatus.Delivering, OrderStatus.Delivered, OrderActor.Driver)]
+    [InlineData(OrderStatus.Pending, OrderStatus.Cancelled, OrderActor.System)]      // store did not answer in time
+    [InlineData(OrderStatus.Assigned, OrderStatus.ArrivedAtStore, OrderActor.Driver)]
+    [InlineData(OrderStatus.Confirmed, OrderStatus.Assigned, OrderActor.Driver)]
+    [InlineData(OrderStatus.Confirmed, OrderStatus.Assigned, OrderActor.Admin)]
+    [InlineData(OrderStatus.ArrivedAtStore, OrderStatus.Delivering, OrderActor.Driver)]
+    [InlineData(OrderStatus.Delivering, OrderStatus.ArrivedAtCustomer, OrderActor.Driver)]
+    [InlineData(OrderStatus.ArrivedAtCustomer, OrderStatus.Delivered, OrderActor.Driver)]
+    [InlineData(OrderStatus.Assigned, OrderStatus.Confirmed, OrderActor.Driver)]       // driver cancels trip → search again
+    [InlineData(OrderStatus.ArrivedAtCustomer, OrderStatus.DeliveryFailed, OrderActor.Driver)]
     [InlineData(OrderStatus.Delivering, OrderStatus.DeliveryFailed, OrderActor.Driver)]
     [InlineData(OrderStatus.DeliveryFailed, OrderStatus.Returned, OrderActor.Admin)]
     public void Allowed_transitions(OrderStatus from, OrderStatus to, OrderActor actor) =>
         Assert.True(OrderStateMachine.CanTransition(from, to, actor));
 
     [Theory]
-    [InlineData(OrderStatus.Pending, OrderStatus.ReadyForPickup, OrderActor.Seller)]   // cannot skip steps
+    [InlineData(OrderStatus.Pending, OrderStatus.Assigned, OrderActor.Driver)]          // store must accept first
     [InlineData(OrderStatus.Confirmed, OrderStatus.Cancelled, OrderActor.Customer)]    // customer cancels only while pending
     [InlineData(OrderStatus.Pending, OrderStatus.Confirmed, OrderActor.Customer)]
     [InlineData(OrderStatus.Delivering, OrderStatus.Delivered, OrderActor.Seller)]
     [InlineData(OrderStatus.Delivered, OrderStatus.Cancelled, OrderActor.Admin)]       // terminal
-    [InlineData(OrderStatus.PickedUp, OrderStatus.Cancelled, OrderActor.Admin)]        // goods already left the store
-    [InlineData(OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderActor.Seller)]
+    [InlineData(OrderStatus.Delivering, OrderStatus.Cancelled, OrderActor.Admin)]      // goods already left the store
+    [InlineData(OrderStatus.Confirmed, OrderStatus.Assigned, OrderActor.Seller)]
+    [InlineData(OrderStatus.Assigned, OrderStatus.Delivering, OrderActor.Driver)]       // must arrive at the store first
+    [InlineData(OrderStatus.Delivering, OrderStatus.Delivered, OrderActor.Driver)]      // must arrive at the customer first
+    [InlineData(OrderStatus.Delivering, OrderStatus.Confirmed, OrderActor.Driver)]      // cannot abandon after pickup
     public void Forbidden_transitions(OrderStatus from, OrderStatus to, OrderActor actor)
     {
         Assert.False(OrderStateMachine.CanTransition(from, to, actor));

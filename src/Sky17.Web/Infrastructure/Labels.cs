@@ -57,13 +57,12 @@ public static class Labels
 {
     public static string Text(this OrderStatus s) => s switch
     {
-        OrderStatus.Pending => "Chờ xác nhận",
-        OrderStatus.Confirmed => "Đã xác nhận",
-        OrderStatus.Preparing => "Đang chuẩn bị",
-        OrderStatus.ReadyForPickup => "Sẵn sàng lấy hàng",
-        OrderStatus.Assigned => "Đã có tài xế",
-        OrderStatus.PickedUp => "Đã lấy hàng",
+        OrderStatus.Pending => "Chờ quán xác nhận",
+        OrderStatus.Confirmed => "Đang tìm tài xế",
+        OrderStatus.Assigned => "Tài xế đang đến quán",
+        OrderStatus.ArrivedAtStore => "Tài xế đã đến quán",
         OrderStatus.Delivering => "Đang giao",
+        OrderStatus.ArrivedAtCustomer => "Tài xế đã đến nơi",
         OrderStatus.Delivered => "Đã giao",
         OrderStatus.Cancelled => "Đã hủy",
         OrderStatus.DeliveryFailed => "Giao thất bại",
@@ -75,8 +74,8 @@ public static class Labels
     {
         OrderStatus.Delivered => "green",
         OrderStatus.Cancelled or OrderStatus.DeliveryFailed or OrderStatus.Returned => "red",
-        OrderStatus.Pending => "orange",
-        OrderStatus.Confirmed or OrderStatus.Preparing => "gray",
+        OrderStatus.Pending or OrderStatus.Confirmed => "orange",
+        OrderStatus.ArrivedAtCustomer => "green",
         _ => "",
     };
 
@@ -84,15 +83,29 @@ public static class Labels
     public static string ActionText(this OrderStatus s) => s switch
     {
         OrderStatus.Confirmed => "✓ Nhận đơn",
-        OrderStatus.Preparing => "🍳 Bắt đầu chuẩn bị",
-        OrderStatus.ReadyForPickup => "📦 Sẵn sàng giao",
         OrderStatus.Cancelled => "Hủy / Từ chối",
         OrderStatus.Returned => "Hoàn trả cửa hàng",
         _ => s.Text(),
     };
 
     public static readonly OrderStatus[] HappyPath =
-        [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Preparing, OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderStatus.PickedUp, OrderStatus.Delivering, OrderStatus.Delivered];
+        [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Assigned, OrderStatus.ArrivedAtStore, OrderStatus.Delivering, OrderStatus.ArrivedAtCustomer, OrderStatus.Delivered];
+
+    public static string Text(this PreparationState p) => p == PreparationState.Ready ? "Món đã sẵn sàng" : "Quán đang chuẩn bị";
+
+    public static string Text(this DispatchOfferStatus s) => s switch
+    {
+        DispatchOfferStatus.Pending => "Đang chờ phản hồi",
+        DispatchOfferStatus.Accepted => "Đã nhận",
+        DispatchOfferStatus.Declined => "Từ chối",
+        DispatchOfferStatus.Expired => "Hết giờ",
+        _ => "Đã thu hồi",
+    };
+
+    public static string Css(this DispatchOfferStatus s) => s switch
+    {
+        DispatchOfferStatus.Accepted => "green", DispatchOfferStatus.Pending => "orange", DispatchOfferStatus.Declined => "red", _ => "gray",
+    };
 
     public static string Text(this StoreStatus s) => s switch
     {
@@ -152,7 +165,9 @@ public static class Labels
         AssignmentStatus.Delivered => "Hoàn thành",
         AssignmentStatus.Failed => "Thất bại",
         AssignmentStatus.Cancelled => "Đã hủy",
-        _ => "Đã gỡ",
+        AssignmentStatus.ArrivedAtStore => "Đã đến quán",
+        AssignmentStatus.ArrivedAtCustomer => "Đã đến nơi giao",
+        _ => "Đã gỡ / hủy chuyến",
     };
 
     public static string Text(this CodTransactionType t) => t == CodTransactionType.CollectedFromCustomer ? "Thu từ khách" : "Nộp về nền tảng";

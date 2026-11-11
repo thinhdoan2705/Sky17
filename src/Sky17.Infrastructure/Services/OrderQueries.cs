@@ -21,7 +21,10 @@ internal static class OrderQueries
             dp == null ? null : dp.FullName,
             o.GrandTotal,
             o.Items.Sum(i => i.Quantity),
-            o.PlacedAtUtc);
+            o.PlacedAtUtc)
+        {
+            PreparationState = o.PreparationState,
+        };
 
     public static IQueryable<Order> ApplyFilter(this IQueryable<Order> q, OrderFilter f)
     {
@@ -58,10 +61,23 @@ internal static class OrderQueries
         var names = await Names.LookupAsync(db, userIds, ct);
 
         string? driverPhone = null, driverPlate = null;
+        (double? Lat, double? Lng, DateTime? At) driverLocation = default;
+        var offers = viewer == OrderActor.Admin
+            ? await (from f in db.DispatchOffers.AsNoTracking()
+                     where f.OrderId == orderId
+                     join p in db.UserProfiles on f.DriverId equals p.UserId into ps
+                     from p in ps.DefaultIfEmpty()
+                     orderby f.OfferedAtUtc descending
+                     select new DispatchOfferHistoryDto(f.Id, f.DriverId, p == null ? f.DriverId : p.FullName, f.Status, f.DriverDistanceMeters, f.OfferedAtUtc, f.RespondedAtUtc)).ToListAsync(ct)
+            : [];
         if (o.DriverId is not null)
         {
             driverPhone = await db.UserProfiles.AsNoTracking().Where(p => p.UserId == o.DriverId).Select(p => p.PhoneNumber).FirstOrDefaultAsync(ct);
-            driverPlate = await db.DriverProfiles.AsNoTracking().Where(p => p.UserId == o.DriverId).Select(p => p.LicensePlate).FirstOrDefaultAsync(ct);
+            var dp = await db.DriverProfiles.AsNoTracking().Where(p => p.UserId == o.DriverId)
+                .Select(p => new { p.LicensePlate, p.LastLatitude, p.LastLongitude, p.LastLocationAtUtc }).FirstOrDefaultAsync(ct);
+            driverPlate = dp?.LicensePlate;
+            // Live position is shared only while the driver is working on this order.
+            if (dp is not null && OrderStateMachine.IsInDelivery(o.Status)) driverLocation = (dp.LastLatitude, dp.LastLongitude, dp.LastLocationAtUtc);
         }
 
         return new OrderDetailDto(
@@ -85,6 +101,13 @@ internal static class OrderQueries
             DropoffLatitude = o.DropoffLatitude,
             DropoffLongitude = o.DropoffLongitude,
             DistanceSource = o.DistanceSource,
+            PreparationState = o.PreparationState,
+            FoodReadyAtUtc = o.FoodReadyAtUtc,
+            DispatchStartedAtUtc = o.DispatchStartedAtUtc,
+            DriverLatitude = driverLocation.Lat,
+            DriverLongitude = driverLocation.Lng,
+            DriverLocationAtUtc = driverLocation.At,
+            Offers = offers,
         };
     }
 

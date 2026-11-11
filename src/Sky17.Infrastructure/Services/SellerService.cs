@@ -8,10 +8,10 @@ namespace Sky17.Infrastructure.Services;
 
 public sealed class SellerService(
     IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock,
-    OrderWorkflow workflow, Notifier notifier, IFileStorage files) : ISellerService
+    OrderWorkflow workflow, Notifier notifier, IFileStorage files, IDispatchService dispatch) : ISellerService
 {
     private const int MaxImagesPerProduct = 5;
-    private static readonly OrderStatus[] SellerTargets = [OrderStatus.Confirmed, OrderStatus.Preparing, OrderStatus.ReadyForPickup, OrderStatus.Cancelled];
+    private static readonly OrderStatus[] SellerTargets = [OrderStatus.Confirmed, OrderStatus.Cancelled];
 
     /// <summary>Server-side store membership check. Every store-scoped operation goes through here.</summary>
     private async Task<(string UserId, StoreMemberRole Role)> AccessAsync(AppDbContext db, int storeId, bool ownerOnly, CancellationToken ct)
@@ -47,7 +47,7 @@ public sealed class SellerService(
         var ordersToday = await orders.CountAsync(o => o.PlacedAtUtc >= todayUtc, ct);
         var revenueToday = await notCancelled.Where(o => o.PlacedAtUtc >= todayUtc).SumAsync(o => o.ProductTotal, ct);
         var pending = await orders.CountAsync(o => o.Status == OrderStatus.Pending, ct);
-        var inProgress = await orders.CountAsync(o => o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.ReadyForPickup, ct);
+        var inProgress = await orders.CountAsync(o => o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore, ct);
         var activeProducts = await db.Products.CountAsync(p => p.StoreId == storeId && p.IsActive && p.IsAvailable, ct);
         var lowStock = await db.Products.CountAsync(p => p.StoreId == storeId && p.IsActive && p.Stock <= 5, ct);
 
@@ -57,7 +57,7 @@ public sealed class SellerService(
         var rate = total30 == 0 ? 100 : (int)((total30 - cancelled30) * 100L / total30);
 
         var last7 = await OrderQueries.DailyAsync(notCancelled, 7, o => o.ProductTotal, now, ct);
-        var action = await orders.Where(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.ReadyForPickup)
+        var action = await orders.Where(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore)
             .ToSummaries(db).Take(6).ToListAsync(ct);
         var top = (await ProductsQuery(db, storeId).ToListAsync(ct)).Where(p => p.IsActive).OrderByDescending(p => p.SoldQuantity).Take(4).ToList();
 
@@ -311,6 +311,25 @@ public sealed class SellerService(
         await db.SaveAsync(ct);
         await tx.CommitAsync(ct);
         await notifier.OrderStatusChangedAsync(orderId, ct);
+        // Store accepted → start looking for the nearest free driver right away.
+        if (target == OrderStatus.Confirmed) await dispatch.DispatchOrderAsync(orderId, ct);
+    }
+
+    public async Task MarkFoodReadyAsync(int storeId, int orderId, CancellationToken ct = default)
+    {
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var (uid, _) = await AccessAsync(db, storeId, false, ct);
+        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.StoreId == storeId, ct)
+            ?? throw new NotFoundException("Không tìm thấy đơn hàng của cửa hàng.");
+        if (!OrderStateMachine.IsKitchenOpen(order.Status)) throw new DomainException("Đơn hàng không còn ở bước chuẩn bị món.");
+        if (order.PreparationState == PreparationState.Ready) return;
+        order.PreparationState = PreparationState.Ready;
+        order.FoodReadyAtUtc = clock.UtcNow;
+        db.Audit(uid, "Order.FoodReady", nameof(Order), orderId, order.Code);
+        await db.SaveAsync(ct);
+        var targets = order.DriverId is null ? new List<string>() : [order.DriverId];
+        await notifier.NotifyAsync(targets, "order", "🍱 Món đã sẵn sàng", $"Đơn {order.Code} tại {order.PickupStoreName} đã sẵn sàng để lấy.", $"/driver/deliveries/{orderId}", orderId, ct);
+        await notifier.NotifyAsync([order.CustomerId], "order", "🍱 Món đã sẵn sàng", $"{order.PickupStoreName} đã chuẩn bị xong đơn {order.Code}.", $"/orders/{order.Code}", orderId, ct);
     }
 
     // ------------------------------------------------------------ Reports & settlements

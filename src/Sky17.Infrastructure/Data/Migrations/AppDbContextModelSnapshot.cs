@@ -487,6 +487,53 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.ToTable("DeliveryRateRules");
                 });
 
+            modelBuilder.Entity("Sky17.Domain.DispatchOffer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("DriverDistanceMeters")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DriverId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OfferedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("RespondedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DispatchOffers_DriverId_Pending")
+                        .HasFilter("\"Status\" = 0");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DispatchOffers_OrderId_Pending")
+                        .HasFilter("\"Status\" = 0");
+
+                    b.HasIndex("OrderId", "DriverId");
+
+                    b.HasIndex("Status", "ExpiresAtUtc");
+
+                    b.ToTable("DispatchOffers");
+                });
+
             modelBuilder.Entity("Sky17.Domain.DriverProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -504,6 +551,15 @@ namespace Sky17.Infrastructure.Data.Migrations
 
                     b.Property<bool>("IsOnline")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double?>("LastLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime?>("LastLocationAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("LastLongitude")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("LicensePlate")
                         .IsRequired()
@@ -602,6 +658,9 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<long>("CollectedCodAmount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -626,6 +685,12 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Property<long>("DiscountAmount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("DispatchAlertedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DispatchStartedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("DistanceMeters")
                         .HasColumnType("INTEGER");
 
@@ -648,6 +713,9 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<string>("FailureReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FoodReadyAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("GrandTotal")
@@ -683,6 +751,9 @@ namespace Sky17.Infrastructure.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<long>("PlatformFee")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PreparationState")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("ProductTotal")
@@ -1419,6 +1490,23 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("Sky17.Domain.DispatchOffer", b =>
+                {
+                    b.HasOne("Sky17.Infrastructure.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Sky17.Domain.Order", "Order")
+                        .WithMany("Offers")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
             modelBuilder.Entity("Sky17.Domain.DriverProfile", b =>
                 {
                     b.HasOne("Sky17.Infrastructure.Data.ApplicationUser", null)
@@ -1599,6 +1687,8 @@ namespace Sky17.Infrastructure.Data.Migrations
                     b.Navigation("History");
 
                     b.Navigation("Items");
+
+                    b.Navigation("Offers");
 
                     b.Navigation("Payment");
                 });

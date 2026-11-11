@@ -36,6 +36,10 @@
                                         @if (Next(o.Status) is { } next)
                                         {
                                             <button class="btn btn-sm" disabled="@Busy" @onclick="() => Advance(o.Id, next)">@next.ActionText()</button>
+                                            }
+                                            else if (OrderStateMachine.IsKitchenOpen(o.Status) && o.PreparationState != PreparationState.Ready)
+                                            {
+                                            <button class="btn btn-orange btn-sm" disabled="@Busy" @onclick="() => FoodReady(o.Id)">🍱 Món đã sẵn sàng</button>
                                         }
                                         <a class="btn btn-soft btn-sm" href="/seller/orders/@o.Id">Chi tiết</a>
                                     </div>
@@ -53,8 +57,8 @@
 @code {
     private static readonly (string Key, string Label)[] tabs =
     [
-        ("active", "Đang xử lý"), ("Pending", "Chờ xác nhận"), ("Confirmed", "Đã xác nhận"), ("Preparing", "Đang chuẩn bị"),
-        ("ReadyForPickup", "Chờ tài xế"), ("done", "Đã kết thúc"), ("all", "Tất cả"),
+        ("active", "Đang xử lý"), ("Pending", "Chờ xác nhận"), ("Confirmed", "Đang tìm tài xế"), ("Assigned", "Tài xế đang đến"),
+        ("ArrivedAtStore", "Tài xế đã đến quán"), ("done", "Đã kết thúc"), ("all", "Tất cả"),
     ];
     private string tab = "active";
     private string search = "";
@@ -76,10 +80,10 @@
     private static OrderStatus? Next(OrderStatus s) => s switch
     {
         OrderStatus.Pending => OrderStatus.Confirmed,
-        OrderStatus.Confirmed => OrderStatus.Preparing,
-        OrderStatus.Preparing => OrderStatus.ReadyForPickup,
         _ => null,
     };
+
+    private Task FoodReady(int orderId) => RunAsync(() => Seller.MarkFoodReadyAsync(StoreId, orderId), "Đã báo tài xế: món đã sẵn sàng");
 
     private Task Advance(int orderId, OrderStatus target) =>
         RunAsync(() => Seller.ChangeOrderStatusAsync(StoreId, orderId, target, null), $"Đã cập nhật: {target.Text()}");

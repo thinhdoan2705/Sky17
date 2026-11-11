@@ -80,6 +80,8 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<RealtimeState>();
 builder.Services.AddScoped<SellerContext>();
 builder.Services.AddScoped<CartState>();
+if (!builder.Configuration.GetValue<bool>("Dispatch:DisableWorker"))
+    builder.Services.AddHostedService<DispatchWorker>();
 
 var keysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(keysPath))

@@ -23,6 +23,14 @@ else
                     <div class="field"><label>Hotline hỗ trợ</label><InputText @bind-Value="s.SupportPhone" /></div>
                     <div class="field"><label>Khu vực phục vụ</label><InputText @bind-Value="s.ServiceArea" /></div>
                 </div>
+                <h3 class="mt-2">Điều phối tài xế (kiểu GrabFood)</h3>
+                <div class="fields">
+                    <div class="field"><label>Thời gian tài xế phản hồi lời mời (giây)</label><InputNumber @bind-Value="s.OfferTimeoutSeconds" /><ValidationMessage For="() => s.OfferTimeoutSeconds" /></div>
+                    <div class="field"><label>Bán kính tìm tài xế (km)</label><InputNumber @bind-Value="s.DispatchRadiusKm" /><ValidationMessage For="() => s.DispatchRadiusKm" /></div>
+                    <div class="field"><label>Vị trí GPS hợp lệ trong (phút)</label><InputNumber @bind-Value="s.LocationFreshMinutes" /><span class="hint">Tài xế không gửi vị trí quá thời gian này sẽ không được gửi chuyến.</span><ValidationMessage For="() => s.LocationFreshMinutes" /></div>
+                    <div class="field"><label>Tự hủy nếu quán không xác nhận sau (phút)</label><InputNumber @bind-Value="s.StoreConfirmTimeoutMinutes" /><ValidationMessage For="() => s.StoreConfirmTimeoutMinutes" /></div>
+                    <div class="field"><label>Cảnh báo admin khi chưa có tài xế sau (phút)</label><InputNumber @bind-Value="s.NoDriverAlertMinutes" /><ValidationMessage For="() => s.NoDriverAlertMinutes" /></div>
+                </div>
                 <label class="check"><InputCheckbox @bind-Value="s.ServiceAvailable" /> Dịch vụ đang hoạt động (bỏ chọn để tạm ngưng nhận đơn mới)</label>
                 <div class="alert alert-info small mt-1">
                     Ví dụ: đơn 5 km → @Fmt.Vnd(Example(5000)); đơn chưa đo khoảng cách → @Fmt.Vnd(s.BaseFee). Thay đổi bảng giá chỉ áp dụng cho đơn mới; bảng giá cũ được lưu lịch sử.

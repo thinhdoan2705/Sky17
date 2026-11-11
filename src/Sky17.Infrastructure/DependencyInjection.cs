@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorage>(new LocalFileStorage(webRootPath));
         services.AddSingleton<OrderWorkflow>();
         services.AddSingleton<Notifier>();
+        services.AddSingleton<IDispatchService, DispatchService>();
 
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<ICartService, CartService>();

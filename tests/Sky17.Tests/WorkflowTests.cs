@@ -263,92 +263,6 @@ public class CheckoutTests
     }
 }
 
-public class DeliveryTests
-{
-    [Fact]
-    public async Task Concurrent_driver_acceptance_has_exactly_one_winner()
-    {
-        await using var app = await TestApp.CreateAsync();
-        var (_, _, _, placed) = await app.CreateReadyOrderAsync();
-        var drivers = new List<TestUser>();
-        for (var i = 0; i < 5; i++) drivers.Add(await app.CreateDriverAsync("Driver " + i));
-
-        var results = await Task.WhenAll(drivers.Select(d => Task.Run(async () =>
-        {
-            using var scope = app.As(d);
-            try { await scope.Get<IDriverService>().AcceptAsync(placed.OrderId); return true; }
-            catch (DomainException) { return false; }
-        })));
-
-        Assert.Equal(1, results.Count(r => r));
-        await using var db = app.Db();
-        var order = await db.Orders.SingleAsync(o => o.Id == placed.OrderId);
-        Assert.Equal(OrderStatus.Assigned, order.Status);
-        var active = await db.DeliveryAssignments.Where(a => a.OrderId == placed.OrderId && a.IsActive).ToListAsync();
-        Assert.Single(active);
-        Assert.Equal(order.DriverId, active[0].DriverId);
-    }
-
-    [Fact]
-    public async Task Unapproved_or_offline_driver_cannot_accept()
-    {
-        await using var app = await TestApp.CreateAsync();
-        var (_, _, _, placed) = await app.CreateReadyOrderAsync();
-        var pending = await app.CreateDriverAsync("Pending", approved: false);
-        var offline = await app.CreateDriverAsync("Offline", online: false);
-        using (var s = app.As(pending)) await Assert.ThrowsAsync<DomainException>(() => s.Get<IDriverService>().AcceptAsync(placed.OrderId));
-        using (var s = app.As(offline)) await Assert.ThrowsAsync<DomainException>(() => s.Get<IDriverService>().AcceptAsync(placed.OrderId));
-    }
-
-    [Fact]
-    public async Task Full_delivery_records_cod_and_driver_balances()
-    {
-        await using var app = await TestApp.CreateAsync();
-        var (customer, storeId, owner, placed) = await app.CreateReadyOrderAsync();
-        var driver = await app.CreateDriverAsync("Lê Hoàng");
-        using (var d = app.As(driver))
-        {
-            var svc = d.Get<IDriverService>();
-            await svc.AcceptAsync(placed.OrderId);
-            await svc.ConfirmPickupAsync(placed.OrderId);
-            await svc.StartDeliveryAsync(placed.OrderId);
-            await svc.ConfirmDeliveredAsync(placed.OrderId);
-            var dash = await svc.GetDashboardAsync();
-            Assert.Equal(105_000, dash.CodHolding);
-            Assert.Equal(105_000 - 12_000, dash.OwedToPlatform);
-        }
-        await using var db = app.Db();
-        var order = await db.Orders.Include(o => o.Payment).SingleAsync(o => o.Id == placed.OrderId);
-        Assert.Equal(OrderStatus.Delivered, order.Status);
-        Assert.Equal(order.GrandTotal, order.CollectedCodAmount);
-        Assert.Equal(PaymentStatus.Collected, order.Payment!.Status);
-        var cod = await db.CodTransactions.SingleAsync(c => c.OrderId == placed.OrderId);
-        Assert.Equal(CodTransactionType.CollectedFromCustomer, cod.Type);
-        Assert.Equal(105_000, cod.Amount);
-        Assert.Equal(driver.Id, cod.DriverId);
-        var statuses = await db.OrderStatusHistories.Where(h => h.OrderId == placed.OrderId).OrderBy(h => h.Id).Select(h => h.NewStatus).ToListAsync();
-        Assert.Equal([OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Preparing, OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderStatus.PickedUp, OrderStatus.Delivering, OrderStatus.Delivered], statuses);
-    }
-
-    [Fact]
-    public async Task Driver_cannot_skip_steps_or_touch_other_drivers_orders()
-    {
-        await using var app = await TestApp.CreateAsync();
-        var (_, _, _, placed) = await app.CreateReadyOrderAsync();
-        var d1 = await app.CreateDriverAsync("D1");
-        var d2 = await app.CreateDriverAsync("D2");
-        using (var s = app.As(d1))
-        {
-            await s.Get<IDriverService>().AcceptAsync(placed.OrderId);
-            await Assert.ThrowsAnyAsync<Exception>(() => s.Get<IDriverService>().ConfirmDeliveredAsync(placed.OrderId)); // must pick up first
-        }
-        using (var s = app.As(d2))
-        {
-            await Assert.ThrowsAsync<ForbiddenException>(() => s.Get<IDriverService>().ConfirmPickupAsync(placed.OrderId));
-            await Assert.ThrowsAsync<ForbiddenException>(() => s.Get<IDriverService>().GetJobAsync(placed.OrderId));
-        }
-    }
-}
 
 public class SettlementTests
 {
@@ -357,14 +271,8 @@ public class SettlementTests
         var app = await TestApp.CreateAsync();
         var (_, storeId, _, placed) = await app.CreateReadyOrderAsync();
         var driver = await app.CreateDriverAsync("D");
-        using (var d = app.As(driver))
-        {
-            var svc = d.Get<IDriverService>();
-            await svc.AcceptAsync(placed.OrderId);
-            await svc.ConfirmPickupAsync(placed.OrderId);
-            await svc.StartDeliveryAsync(placed.OrderId);
-            await svc.ConfirmDeliveredAsync(placed.OrderId);
-        }
+        await app.AcceptViaDispatchAsync(driver, placed.OrderId);
+        await app.CompleteTripAsync(driver, placed.OrderId);
         var admin = await app.CreateUserAsync("Admin", Roles.Admin);
         return (app, admin, driver, storeId, placed.OrderId);
     }

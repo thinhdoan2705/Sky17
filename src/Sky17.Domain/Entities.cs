@@ -190,11 +190,21 @@ public class Order : AuditableEntity, IVersioned
     public required string IdempotencyKey { get; set; }
     public DateTime PlacedAtUtc { get; set; }
     public DateTime? DeliveredAtUtc { get; set; }
+
+    // Kitchen & dispatch
+    public PreparationState PreparationState { get; set; }
+    public DateTime? FoodReadyAtUtc { get; set; }
+    public DateTime? ConfirmedAtUtc { get; set; }
+    /// <summary>When the current driver search started (reset when the order goes back to searching).</summary>
+    public DateTime? DispatchStartedAtUtc { get; set; }
+    /// <summary>Set once admins were alerted that no driver could be found.</summary>
+    public DateTime? DispatchAlertedAtUtc { get; set; }
     public long Version { get; set; }
 
     public ICollection<OrderItem> Items { get; set; } = [];
     public ICollection<OrderStatusHistory> History { get; set; } = [];
     public ICollection<DeliveryAssignment> Assignments { get; set; } = [];
+    public ICollection<DispatchOffer> Offers { get; set; } = [];
     public Payment? Payment { get; set; }
 }
 
@@ -235,6 +245,10 @@ public class DriverProfile : AuditableEntity, IVersioned
     public DriverStatus Status { get; set; } = DriverStatus.PendingApproval;
     public string? StatusReason { get; set; }
     public bool IsOnline { get; set; }
+    /// <summary>Last reported GPS position (heartbeat from the driver app while online).</summary>
+    public double? LastLatitude { get; set; }
+    public double? LastLongitude { get; set; }
+    public DateTime? LastLocationAtUtc { get; set; }
     public DateTime? ApprovedAtUtc { get; set; }
     public long Version { get; set; }
 }
@@ -371,4 +385,27 @@ public static class SettingKeys
     public const string ServiceAvailable = "Service.Available";
     public const string ServiceArea = "Service.Area";
     public const string MaxActiveDeliveriesPerDriver = "Driver.MaxActiveDeliveries";
+    public const string OfferTimeoutSeconds = "Dispatch.OfferTimeoutSeconds";
+    public const string DispatchRadiusKm = "Dispatch.RadiusKm";
+    public const string LocationFreshMinutes = "Dispatch.LocationFreshMinutes";
+    public const string StoreConfirmTimeoutMinutes = "Dispatch.StoreConfirmTimeoutMinutes";
+    public const string NoDriverAlertMinutes = "Dispatch.NoDriverAlertMinutes";
+}
+
+/// <summary>
+/// A time-limited job offer sent to one driver (GrabFood-style dispatch).
+/// Only one pending offer per order and per driver at a time.
+/// </summary>
+public class DispatchOffer
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public Order Order { get; set; } = null!;
+    public required string DriverId { get; set; }
+    public DispatchOfferStatus Status { get; set; } = DispatchOfferStatus.Pending;
+    /// <summary>Straight-line distance driver → store at offer time (used for ranking/display only, never pricing).</summary>
+    public int? DriverDistanceMeters { get; set; }
+    public DateTime OfferedAtUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
+    public DateTime? RespondedAtUtc { get; set; }
 }

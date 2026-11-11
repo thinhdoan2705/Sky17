@@ -41,18 +41,72 @@ else
             </div>
         </section>
     </div>
+    <section class="card mt-2" id="vi-tri">
+        <div class="section-title">
+            <h2>📍 Vị trí nhận chuyến</h2>
+            <span class="small muted">Cập nhật lần cuối: @(p.LastLocationAtUtc is { } at ? Fmt.Ago(at) : "chưa có")</span>
+        </div>
+        <p class="small muted">Hệ thống gửi chuyến cho tài xế rảnh <b>gần quán nhất</b> dựa trên vị trí này. Khi đang bật nhận chuyến, ứng dụng tự gửi vị trí mỗi 20 giây.</p>
+        <div class="tabs">
+            <button class="@(mode == "gps" ? "active" : "")" @onclick="@(() => SetModeAsync("gps"))">🛰️ Dùng GPS điện thoại (khuyên dùng)</button>
+            <button class="@(mode == "manual" ? "active" : "")" @onclick="@(() => SetModeAsync("manual"))">📌 Ghim vị trí thủ công</button>
+        </div>
+        @if (mode == "manual")
+        {
+            <LocationPicker Label="Vị trí chờ chuyến của bạn" Latitude="manualLat" Longitude="manualLng" OnChanged="PickManual" Height="280px" />
+            <div class="form-actions"><button class="btn" disabled="@(Busy || manualLat is null)" @onclick="SaveManual">Lưu vị trí</button></div>
+        }
+        else
+        {
+            <p class="small">GPS chỉ hoạt động qua HTTPS (hoặc localhost) và khi bạn cho phép trình duyệt truy cập vị trí. Nếu không lấy được GPS, hãy chuyển sang ghim thủ công.</p>
+        }
+    </section>
 }
 
 @code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
     private DriverProfileDto? p;
     private ProfileInput person = new();
     private DriverProfileInput vehicle = new();
+    private string mode = "gps";
+    private double? manualLat, manualLng;
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/driver.js");
+            mode = await module.InvokeAsync<string>("getMode");
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task SetModeAsync(string m)
+    {
+        mode = m;
+        if (module is not null) await module.InvokeVoidAsync("setMode", m);
+        if (m == "gps") await Realtime.RaiseAsync(null); // layout restarts tracking with GPS
+    }
+
+    private void PickManual((double? Lat, double? Lng) pt) { manualLat = pt.Lat; manualLng = pt.Lng; }
+
+    private Task SaveManual() => RunAsync(async () =>
+    {
+        await Drivers.UpdateLocationAsync(manualLat!.Value, manualLng!.Value);
+        if (module is not null) await module.InvokeVoidAsync("setMode", "manual");
+        await Realtime.RaiseAsync(null); // layout restarts heartbeats with the pinned point
+    }, "Đã lưu vị trí chờ chuyến");
 
     protected override async Task LoadAsync()
     {
         p = await Drivers.GetProfileAsync();
         person = new ProfileInput { FullName = p.FullName, PhoneNumber = p.PhoneNumber };
         vehicle = new DriverProfileInput { VehicleType = p.VehicleType, LicensePlate = p.LicensePlate, IdentityNumber = p.IdentityNumber, ServiceArea = p.ServiceArea };
+        manualLat ??= p.LastLatitude;
+        manualLng ??= p.LastLongitude;
     }
 
     protected override bool ReloadOnRealtime(RealtimeMessage? m) => false;

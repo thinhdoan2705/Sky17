@@ -112,13 +112,15 @@ public static class DbSeeder
         var d1 = await EnsureUserAsync(um, db, "driver.lehoang@sky17.local", pw, "Lê Hoàng", "0903000001", Roles.Driver);
         var d2 = await EnsureUserAsync(um, db, "driver.vuanh@sky17.local", pw, "Vũ Anh", "0903000002", Roles.Driver);
         var d3 = await EnsureUserAsync(um, db, "driver.anhkhoa@sky17.local", pw, "Nguyễn Anh Khoa", "0903000003", Roles.Driver);
+        var d4 = await EnsureUserAsync(um, db, "driver.minhtri@sky17.local", pw, "Phan Minh Trí", "0903000004", Roles.Driver);
         var c1 = await EnsureUserAsync(um, db, "customer.minhanh@sky17.local", pw, "Nguyễn Minh Anh", "0904000001", Roles.Customer);
         var c2 = await EnsureUserAsync(um, db, "customer.giahuy@sky17.local", pw, "Trần Gia Huy", "0904000002", Roles.Customer);
 
         var now = DateTime.UtcNow;
         db.DriverProfiles.AddRange(
-            new DriverProfile { UserId = d1.Id, LicensePlate = "61A1-12345", VehicleType = "Xe máy", Status = DriverStatus.Active, IsOnline = true, ApprovedAtUtc = now.AddDays(-30) },
-            new DriverProfile { UserId = d2.Id, LicensePlate = "59H1-99887", VehicleType = "Xe máy", Status = DriverStatus.Active, IsOnline = false, ApprovedAtUtc = now.AddDays(-20) },
+            new DriverProfile { UserId = d1.Id, LicensePlate = "61A1-12345", VehicleType = "Xe máy", Status = DriverStatus.Active, IsOnline = true, ApprovedAtUtc = now.AddDays(-30), LastLatitude = 10.9741, LastLongitude = 106.6602, LastLocationAtUtc = now },
+            new DriverProfile { UserId = d2.Id, LicensePlate = "59H1-99887", VehicleType = "Xe máy", Status = DriverStatus.Active, IsOnline = true, ApprovedAtUtc = now.AddDays(-20), LastLatitude = 10.9731, LastLongitude = 106.6579, LastLocationAtUtc = now },
+            new DriverProfile { UserId = d4.Id, LicensePlate = "61C1-55555", VehicleType = "Xe máy", Status = DriverStatus.Active, IsOnline = true, ApprovedAtUtc = now.AddDays(-10), LastLatitude = 10.9822, LastLongitude = 106.6510, LastLocationAtUtc = now },
             new DriverProfile { UserId = d3.Id, LicensePlate = "61B2-24680", VehicleType = "Xe máy", Status = DriverStatus.PendingApproval });
 
         db.Addresses.AddRange(
@@ -181,7 +183,7 @@ public static class DbSeeder
             OrderStatus[] path = status switch
             {
                 OrderStatus.Cancelled => [OrderStatus.Pending, OrderStatus.Cancelled],
-                _ => [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Preparing, OrderStatus.ReadyForPickup, OrderStatus.Assigned, OrderStatus.PickedUp, OrderStatus.Delivering, OrderStatus.Delivered],
+                _ => [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Assigned, OrderStatus.ArrivedAtStore, OrderStatus.Delivering, OrderStatus.ArrivedAtCustomer, OrderStatus.Delivered],
             };
             var steps = path.Take(Array.IndexOf(path, status) + 1).ToList();
             OrderStatus? prev = null;
@@ -191,7 +193,7 @@ public static class DbSeeder
                 var by = st switch
                 {
                     OrderStatus.Pending or OrderStatus.Cancelled => cust.Id,
-                    OrderStatus.Confirmed or OrderStatus.Preparing or OrderStatus.ReadyForPickup => s.Members.First().UserId,
+                    OrderStatus.Confirmed => s.Members.First().UserId,
                     _ => driver?.Id,
                 };
                 o.History.Add(new OrderStatusHistory { PreviousStatus = prev, NewStatus = st, ChangedAtUtc = t, ChangedByUserId = by, Reason = st == OrderStatus.Cancelled ? reason : null });
@@ -199,6 +201,14 @@ public static class DbSeeder
                 t = t.AddMinutes(6);
             }
             o.Status = status;
+            if (steps.Contains(OrderStatus.Confirmed))
+            {
+                o.ConfirmedAtUtc = placed.AddMinutes(6);
+                // Searching orders restart their driver search at startup so the dispatcher picks them up.
+                o.DispatchStartedAtUtc = status == OrderStatus.Confirmed ? now : placed.AddMinutes(6);
+                o.PreparationState = steps.Contains(OrderStatus.Delivering) ? PreparationState.Ready : PreparationState.Preparing;
+                if (o.PreparationState == PreparationState.Ready) o.FoodReadyAtUtc = placed.AddMinutes(20);
+            }
             if (status == OrderStatus.Cancelled) { o.CancelReason = reason; o.Payment.Status = PaymentStatus.Cancelled; }
             if (driver is not null && steps.Contains(OrderStatus.Assigned))
             {
@@ -207,8 +217,8 @@ public static class DbSeeder
                 o.Assignments.Add(new DeliveryAssignment
                 {
                     DriverId = driver.Id, AssignedAtUtc = placed.AddMinutes(24), IsActive = !delivered,
-                    Status = status switch { OrderStatus.Delivered => AssignmentStatus.Delivered, OrderStatus.Delivering => AssignmentStatus.Delivering, OrderStatus.PickedUp => AssignmentStatus.PickedUp, _ => AssignmentStatus.Assigned },
-                    PickedUpAtUtc = steps.Contains(OrderStatus.PickedUp) ? placed.AddMinutes(30) : null,
+                    Status = status switch { OrderStatus.Delivered => AssignmentStatus.Delivered, OrderStatus.Delivering => AssignmentStatus.Delivering, OrderStatus.ArrivedAtStore => AssignmentStatus.ArrivedAtStore, OrderStatus.ArrivedAtCustomer => AssignmentStatus.ArrivedAtCustomer, _ => AssignmentStatus.Assigned },
+                    PickedUpAtUtc = steps.Contains(OrderStatus.Delivering) ? placed.AddMinutes(30) : null,
                     CompletedAtUtc = delivered ? t : null,
                 });
                 if (delivered)
@@ -232,9 +242,9 @@ public static class DbSeeder
         AddOrder(c1, "Nguyễn Minh Anh", "0904000001", c1Addr, coffee, [(cfSua, 3), (matcha, 1)], 1.7, OrderStatus.Delivered, d1);
         AddOrder(c2, "Trần Gia Huy", "0904000002", c2Addr, coffee, [(banhMi, 2), (cfSua, 1)], 0.9, OrderStatus.Delivered, d2);
         AddOrder(c1, "Nguyễn Minh Anh", "0904000001", c1Addr, bep, [(pho, 2)], 0.08, OrderStatus.Delivering, d1);
-        AddOrder(c2, "Trần Gia Huy", "0904000002", c2Addr, coffee, [(traDao, 1), (burger, 1)], 0.05, OrderStatus.ReadyForPickup, null);
-        AddOrder(c1, "Nguyễn Minh Anh", "0904000001", c1Addr, bep, [(comGa, 1), (traTac, 1)], 0.03, OrderStatus.Preparing, null);
-        AddOrder(c2, "Trần Gia Huy", "0904000002", c2Addr, coffee, [(cfSua, 2)], 0.01, OrderStatus.Pending, null);
+        AddOrder(c2, "Trần Gia Huy", "0904000002", c2Addr, coffee, [(traDao, 1), (burger, 1)], 0.02, OrderStatus.Confirmed, null);
+        AddOrder(c1, "Nguyễn Minh Anh", "0904000001", c1Addr, bep, [(comGa, 1), (traTac, 1)], 0.04, OrderStatus.ArrivedAtStore, d2);
+        AddOrder(c2, "Trần Gia Huy", "0904000002", c2Addr, coffee, [(cfSua, 2)], 0.0005, OrderStatus.Pending, null);
         await db.SaveChangesAsync(ct);
 
         // COD ledger for delivered demo orders.

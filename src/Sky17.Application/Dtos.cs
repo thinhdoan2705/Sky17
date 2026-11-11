@@ -77,7 +77,10 @@ public sealed record PlaceOrderResult(int OrderId, string Code, bool WasDuplicat
 
 public sealed record OrderSummaryDto(
     int Id, string Code, OrderStatus Status, string StoreName, string CustomerName, string RecipientPhone,
-    string? DriverName, long GrandTotal, int ItemCount, DateTime PlacedAtUtc);
+    string? DriverName, long GrandTotal, int ItemCount, DateTime PlacedAtUtc)
+{
+    public PreparationState PreparationState { get; init; }
+}
 
 public sealed record OrderItemDto(int ProductId, string Name, string Emoji, long UnitPrice, int Quantity, long LineTotal);
 
@@ -103,6 +106,16 @@ public sealed record OrderDetailDto(
     public double? DropoffLatitude { get; init; }
     public double? DropoffLongitude { get; init; }
     public DistanceSource DistanceSource { get; init; }
+    public PreparationState PreparationState { get; init; }
+    public DateTime? FoodReadyAtUtc { get; init; }
+    public DateTime? DispatchStartedAtUtc { get; init; }
+    /// <summary>Live driver position (only while a driver works on the order).</summary>
+    public double? DriverLatitude { get; init; }
+    public double? DriverLongitude { get; init; }
+    public DateTime? DriverLocationAtUtc { get; init; }
+    /// <summary>Dispatch offers (admin view only; empty for other viewers).</summary>
+    public IReadOnlyList<DispatchOfferHistoryDto> Offers { get; init; } = [];
+    public bool IsSearchingDriver => Status == OrderStatus.Confirmed && DriverId is null;
 }
 
 public sealed class OrderFilter

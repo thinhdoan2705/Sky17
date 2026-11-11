@@ -1,37 +1,39 @@
 namespace Sky17.Domain;
 
 /// <summary>
-/// Single source of truth for allowed order status transitions and who may perform them.
+/// Single source of truth for allowed order status transitions and who may perform them (GrabFood-style flow):
+/// Pending → Confirmed (store accepts, driver search starts) → Assigned (driver accepted offer) → ArrivedAtStore
+/// → Delivering (food picked up) → ArrivedAtCustomer → Delivered.
 /// </summary>
 public static class OrderStateMachine
 {
     private static readonly Dictionary<(OrderStatus From, OrderStatus To), OrderActor[]> Rules = new()
     {
         [(OrderStatus.Pending, OrderStatus.Confirmed)] = [OrderActor.Seller],
-        [(OrderStatus.Pending, OrderStatus.Cancelled)] = [OrderActor.Customer, OrderActor.Seller, OrderActor.Admin],
+        // Store did not answer in time → system auto-cancel.
+        [(OrderStatus.Pending, OrderStatus.Cancelled)] = [OrderActor.Customer, OrderActor.Seller, OrderActor.Admin, OrderActor.System],
 
-        [(OrderStatus.Confirmed, OrderStatus.Preparing)] = [OrderActor.Seller],
+        // Searching for a driver.
+        [(OrderStatus.Confirmed, OrderStatus.Assigned)] = [OrderActor.Driver, OrderActor.Admin],
         [(OrderStatus.Confirmed, OrderStatus.Cancelled)] = [OrderActor.Seller, OrderActor.Admin],
 
-        [(OrderStatus.Preparing, OrderStatus.ReadyForPickup)] = [OrderActor.Seller],
-        [(OrderStatus.Preparing, OrderStatus.Cancelled)] = [OrderActor.Admin],
-
-        [(OrderStatus.ReadyForPickup, OrderStatus.Assigned)] = [OrderActor.Driver, OrderActor.Admin],
-        [(OrderStatus.ReadyForPickup, OrderStatus.Cancelled)] = [OrderActor.Admin],
-
-        // Admin may unassign (release back to the pool) before pickup.
-        [(OrderStatus.Assigned, OrderStatus.ReadyForPickup)] = [OrderActor.Admin],
-        [(OrderStatus.Assigned, OrderStatus.PickedUp)] = [OrderActor.Driver],
+        // Driver heading to the store. Driver may cancel the trip (order goes back to searching).
+        [(OrderStatus.Assigned, OrderStatus.ArrivedAtStore)] = [OrderActor.Driver],
+        [(OrderStatus.Assigned, OrderStatus.Confirmed)] = [OrderActor.Driver, OrderActor.Admin],
         [(OrderStatus.Assigned, OrderStatus.Cancelled)] = [OrderActor.Admin],
 
-        [(OrderStatus.PickedUp, OrderStatus.Delivering)] = [OrderActor.Driver],
-        [(OrderStatus.PickedUp, OrderStatus.DeliveryFailed)] = [OrderActor.Driver, OrderActor.Admin],
+        [(OrderStatus.ArrivedAtStore, OrderStatus.Delivering)] = [OrderActor.Driver],
+        [(OrderStatus.ArrivedAtStore, OrderStatus.Confirmed)] = [OrderActor.Driver, OrderActor.Admin],
+        [(OrderStatus.ArrivedAtStore, OrderStatus.Cancelled)] = [OrderActor.Admin],
 
-        [(OrderStatus.Delivering, OrderStatus.Delivered)] = [OrderActor.Driver],
+        [(OrderStatus.Delivering, OrderStatus.ArrivedAtCustomer)] = [OrderActor.Driver],
         [(OrderStatus.Delivering, OrderStatus.DeliveryFailed)] = [OrderActor.Driver, OrderActor.Admin],
 
-        // Failed deliveries are reviewed by admin: retry (back to pool) or return to store.
-        [(OrderStatus.DeliveryFailed, OrderStatus.ReadyForPickup)] = [OrderActor.Admin],
+        [(OrderStatus.ArrivedAtCustomer, OrderStatus.Delivered)] = [OrderActor.Driver],
+        [(OrderStatus.ArrivedAtCustomer, OrderStatus.DeliveryFailed)] = [OrderActor.Driver, OrderActor.Admin],
+
+        // Failed deliveries are reviewed by admin: retry (search a new driver) or return to store.
+        [(OrderStatus.DeliveryFailed, OrderStatus.Confirmed)] = [OrderActor.Admin],
         [(OrderStatus.DeliveryFailed, OrderStatus.Returned)] = [OrderActor.Admin],
     };
 
@@ -55,11 +57,18 @@ public static class OrderStateMachine
     public static bool IsTerminal(OrderStatus s) =>
         s is OrderStatus.Delivered or OrderStatus.Cancelled or OrderStatus.Returned;
 
-    /// <summary>Order is with a driver (not yet finished).</summary>
+    /// <summary>A driver is working on the order.</summary>
     public static bool IsInDelivery(OrderStatus s) =>
-        s is OrderStatus.Assigned or OrderStatus.PickedUp or OrderStatus.Delivering;
+        s is OrderStatus.Assigned or OrderStatus.ArrivedAtStore or OrderStatus.Delivering or OrderStatus.ArrivedAtCustomer;
 
-    /// <summary>Stock has not left the store yet, so cancelling restores inventory.</summary>
+    /// <summary>Food has not left the store yet, so cancelling restores inventory.</summary>
     public static bool IsBeforePickup(OrderStatus s) =>
-        s is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.Preparing or OrderStatus.ReadyForPickup or OrderStatus.Assigned;
+        s is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.Assigned or OrderStatus.ArrivedAtStore;
+
+    /// <summary>The store may still mark the food as ready.</summary>
+    public static bool IsKitchenOpen(OrderStatus s) =>
+        s is OrderStatus.Confirmed or OrderStatus.Assigned or OrderStatus.ArrivedAtStore;
+
+    public static readonly OrderStatus[] DriverActiveStatuses =
+        [OrderStatus.Assigned, OrderStatus.ArrivedAtStore, OrderStatus.Delivering, OrderStatus.ArrivedAtCustomer];
 }

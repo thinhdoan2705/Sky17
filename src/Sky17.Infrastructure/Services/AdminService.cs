@@ -9,7 +9,7 @@ namespace Sky17.Infrastructure.Services;
 
 public sealed class AdminService(
     IDbContextFactory<AppDbContext> dbf, ICurrentUserAccessor users, IClock clock, OrderWorkflow workflow,
-    Notifier notifier, IServiceScopeFactory scopes) : IAdminService
+    Notifier notifier, IServiceScopeFactory scopes, IDispatchService dispatch) : IAdminService
 {
     private async Task<string> AdminAsync(CancellationToken ct) => (await users.GetAsync(ct)).RequireRole(Roles.Admin);
 
@@ -31,8 +31,8 @@ public sealed class AdminService(
         return new AdminDashboardDto(
             await orders.CountAsync(ct),
             await orders.CountAsync(o => o.PlacedAtUtc >= today, ct),
-            await orders.CountAsync(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.ReadyForPickup, ct),
-            await orders.CountAsync(o => o.Status == OrderStatus.Assigned || o.Status == OrderStatus.PickedUp || o.Status == OrderStatus.Delivering, ct),
+            await orders.CountAsync(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Confirmed, ct),
+            await orders.CountAsync(o => o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore || o.Status == OrderStatus.Delivering || o.Status == OrderStatus.ArrivedAtCustomer, ct),
             await delivered.CountAsync(ct),
             await orders.CountAsync(o => o.Status == OrderStatus.DeliveryFailed, ct),
             await db.Stores.CountAsync(s => s.Status == StoreStatus.Active, ct),
@@ -78,7 +78,7 @@ public sealed class AdminService(
                           select new
                           {
                               d.UserId, p.FullName, d.LicensePlate, d.IsOnline,
-                              Active = db.Orders.Count(o => o.DriverId == d.UserId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.PickedUp || o.Status == OrderStatus.Delivering)),
+                              Active = db.Orders.Count(o => o.DriverId == d.UserId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore || o.Status == OrderStatus.Delivering || o.Status == OrderStatus.ArrivedAtCustomer)),
                           }).ToListAsync(ct);
         return rows.Select(r => new DriverOptionDto(r.UserId, r.FullName, r.LicensePlate, r.IsOnline, r.Active))
             .OrderByDescending(r => r.IsOnline).ThenBy(r => r.ActiveDeliveries).ToList();
@@ -91,11 +91,11 @@ public sealed class AdminService(
         await OrderWorkflow.EnsureDriverCanTakeAsync(db, driverId, requireOnline: false, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var order = await OrderWorkflow.WithWorkflowGraph(db.Orders).FirstOrDefaultAsync(o => o.Id == orderId, ct) ?? throw new NotFoundException();
-        if (order.Status == OrderStatus.Assigned)
+        if (order.Status is OrderStatus.Assigned or OrderStatus.ArrivedAtStore)
         {
             // Reassignment is only permitted before pickup.
             if (order.DriverId == driverId) throw new DomainException("Tài xế này đang được phân công cho đơn.");
-            await workflow.ApplyAsync(db, order, OrderStatus.ReadyForPickup, OrderActor.Admin, uid, "Admin phân công lại tài xế", ct);
+            await workflow.ApplyAsync(db, order, OrderStatus.Confirmed, OrderActor.Admin, uid, "Admin phân công lại tài xế", ct);
             await db.SaveAsync(ct);
         }
         db.ChangeTracker.Clear();
@@ -114,13 +114,14 @@ public sealed class AdminService(
         await db.SaveAsync(ct);
         await tx.CommitAsync(ct);
         await notifier.OrderStatusChangedAsync(orderId, ct);
+        if (target == OrderStatus.Confirmed) await dispatch.DispatchOrderAsync(orderId, ct); // back to driver search
     }
 
-    public Task UnassignDriverAsync(int orderId, string reason, CancellationToken ct = default) => TransitionAsync(orderId, OrderStatus.ReadyForPickup, reason, ct);
+    public Task UnassignDriverAsync(int orderId, string reason, CancellationToken ct = default) => TransitionAsync(orderId, OrderStatus.Confirmed, reason, ct);
     public Task CancelOrderAsync(int orderId, string reason, CancellationToken ct = default) => TransitionAsync(orderId, OrderStatus.Cancelled, reason, ct);
     public Task MarkDeliveryFailedAsync(int orderId, string reason, CancellationToken ct = default) => TransitionAsync(orderId, OrderStatus.DeliveryFailed, reason, ct);
     public Task ResolveFailedDeliveryAsync(int orderId, bool retry, string reason, CancellationToken ct = default) =>
-        TransitionAsync(orderId, retry ? OrderStatus.ReadyForPickup : OrderStatus.Returned, reason, ct);
+        TransitionAsync(orderId, retry ? OrderStatus.Confirmed : OrderStatus.Returned, reason, ct);
 
     public async Task SetDistanceAsync(int orderId, int distanceMeters, string reason, CancellationToken ct = default)
     {
@@ -236,7 +237,7 @@ public sealed class AdminService(
         orderby d.Status, d.IsOnline descending
         select new AdminDriverDto(d.UserId, p == null ? u.Email! : p.FullName, u.Email!, p == null ? null : p.PhoneNumber, d.VehicleType, d.LicensePlate,
             d.Status, d.StatusReason, d.IsOnline,
-            db.Orders.Count(o => o.DriverId == d.UserId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.PickedUp || o.Status == OrderStatus.Delivering)),
+            db.Orders.Count(o => o.DriverId == d.UserId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore || o.Status == OrderStatus.Delivering || o.Status == OrderStatus.ArrivedAtCustomer)),
             db.Orders.Count(o => o.DriverId == d.UserId && o.Status == OrderStatus.Delivered),
             db.Orders.Where(o => o.DriverId == d.UserId && o.Status == OrderStatus.Delivered && o.DriverSettlementState != OrderSettlementState.Settled).Sum(o => (long?)o.CollectedCodAmount) ?? 0,
             db.Orders.Where(o => o.DriverId == d.UserId && o.Status == OrderStatus.Delivered && o.DriverSettlementState != OrderSettlementState.Settled).Sum(o => (long?)(o.CollectedCodAmount - o.DriverEarning)) ?? 0,
@@ -285,7 +286,7 @@ public sealed class AdminService(
         if (status is DriverStatus.Rejected or DriverStatus.Suspended)
         {
             if (string.IsNullOrWhiteSpace(reason)) throw new DomainException("Vui lòng nhập lý do.");
-            var active = await db.Orders.CountAsync(o => o.DriverId == userId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.PickedUp || o.Status == OrderStatus.Delivering), ct);
+            var active = await db.Orders.CountAsync(o => o.DriverId == userId && (o.Status == OrderStatus.Assigned || o.Status == OrderStatus.ArrivedAtStore || o.Status == OrderStatus.Delivering || o.Status == OrderStatus.ArrivedAtCustomer), ct);
             if (active > 0) throw new DomainException($"Tài xế đang có {active} đơn chưa hoàn tất. Hãy phân công lại trước khi tạm khóa.");
             d.IsOnline = false;
         }
@@ -453,6 +454,7 @@ public sealed class AdminService(
         await AdminAsync(ct);
         await using var db = await dbf.CreateDbContextAsync(ct);
         var rule = await Settings.GetRateRuleAsync(db, ct);
+        var ds = await Settings.DispatchAsync(db, ct);
         return new DeliverySettingsInput
         {
             BaseFee = rule.BaseFee,
@@ -465,6 +467,11 @@ public sealed class AdminService(
             SupportPhone = await Settings.GetAsync(db, SettingKeys.SupportPhone, ct),
             ServiceArea = await Settings.GetAsync(db, SettingKeys.ServiceArea, ct) ?? "Bình Dương",
             MaxActiveDeliveriesPerDriver = await Settings.MaxActiveDeliveriesAsync(db, ct),
+            OfferTimeoutSeconds = ds.OfferTimeoutSeconds,
+            DispatchRadiusKm = ds.RadiusKm,
+            LocationFreshMinutes = ds.LocationFreshMinutes,
+            StoreConfirmTimeoutMinutes = ds.StoreConfirmTimeoutMinutes,
+            NoDriverAlertMinutes = ds.NoDriverAlertMinutes,
         };
     }
 
@@ -493,6 +500,11 @@ public sealed class AdminService(
         await Settings.SetAsync(db, SettingKeys.SupportPhone, input.SupportPhone?.Trim() ?? "", uid, ct);
         await Settings.SetAsync(db, SettingKeys.ServiceArea, input.ServiceArea.Trim(), uid, ct);
         await Settings.SetAsync(db, SettingKeys.MaxActiveDeliveriesPerDriver, input.MaxActiveDeliveriesPerDriver.ToString(), uid, ct);
+        await Settings.SetAsync(db, SettingKeys.OfferTimeoutSeconds, input.OfferTimeoutSeconds.ToString(), uid, ct);
+        await Settings.SetAsync(db, SettingKeys.DispatchRadiusKm, input.DispatchRadiusKm.ToString(), uid, ct);
+        await Settings.SetAsync(db, SettingKeys.LocationFreshMinutes, input.LocationFreshMinutes.ToString(), uid, ct);
+        await Settings.SetAsync(db, SettingKeys.StoreConfirmTimeoutMinutes, input.StoreConfirmTimeoutMinutes.ToString(), uid, ct);
+        await Settings.SetAsync(db, SettingKeys.NoDriverAlertMinutes, input.NoDriverAlertMinutes.ToString(), uid, ct);
         db.Audit(uid, "Settings.Updated", nameof(SystemSetting), null,
             $"base={input.BaseFee} baseM={input.BaseDistanceMeters} perKm={input.FeePerKm} fee={input.PlatformFeeBps}bps driver={input.DriverShareBps}bps service={input.ServiceAvailable}");
         await db.SaveAsync(ct);

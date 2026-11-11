@@ -23,7 +23,8 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 
 ## Phase 3 — Driver, dispatch, order lifecycle
 - ✅ State machine with actor rules; history + audit on every transition
-- ✅ Driver: online/offline, dashboard, open jobs, atomic accept (race-tested), max concurrent deliveries setting, pickup → delivering → delivered, failure report with reason, Google Maps navigation links, delivery detail, history, earnings & COD wallet, profile/vehicle
+- ✅ **GrabFood dispatch** (docs/DISPATCH_FLOW.md): store accept → nearest free driver gets a ringing 30 s popup (sound, vibration, system notification), decline/timeout → next driver, GPS/manual location heartbeat, trip steps đến quán → lấy món → đến nơi → giao, driver cancel trip → re-dispatch, store “Món đã sẵn sàng”, live driver marker for customers, admin offer history, auto-cancel unanswered orders, no-driver alerts, dispatch settings. Migration `GrabDispatchFlow`. 14 dispatch tests.
+- ✅ Driver: online/offline, dashboard (radar, acceptance rate), max concurrent deliveries setting, failure report with reason, navigation links, delivery detail, history, earnings & COD wallet, profile/vehicle/location
 - ✅ Customer phone/name hidden from drivers until assigned; other drivers' deliveries are private
 - ✅ Admin manual assignment, reassignment before pickup, unassign, failed-delivery review (retry / return), cancel with reason, manual distance override (re-prices order, notifies customer)
 
@@ -46,4 +47,6 @@ Verification used: `dotnet build` (0 errors), `dotnet test` (50/50), migrations 
 - 🟡 **Business hours** — one daily open/close window per store (no per-weekday schedule).
 - 🟡 **Store logo upload** — stores use an emoji; product images are uploadable.
 - ⬜ **Browser E2E automation (Playwright)** and visual regression at the target widths.
-- ⬜ Background jobs (e.g., auto-cancel stale pending orders) — none yet.
+- ✅ Background dispatch worker (every 3 s): offer expiry, re-dispatch, auto-cancel unanswered orders, admin alerts.
+- ⬜ **Ring when the app is closed** — needs Web Push (service worker + VAPID) or a native app; today the driver page must stay open (foreground or background tab).
+- ⬜ Driver ratings / batching several orders per trip / surge pricing — not implemented.

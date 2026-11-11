@@ -92,7 +92,12 @@ public sealed record SettlementDetailDto(SettlementDto Settlement, IReadOnlyList
 
 public sealed record DriverProfileDto(
     string UserId, string FullName, string? PhoneNumber, string Email, string VehicleType, string LicensePlate,
-    string? IdentityNumber, string ServiceArea, DriverStatus Status, string? StatusReason, bool IsOnline);
+    string? IdentityNumber, string ServiceArea, DriverStatus Status, string? StatusReason, bool IsOnline)
+{
+    public double? LastLatitude { get; init; }
+    public double? LastLongitude { get; init; }
+    public DateTime? LastLocationAtUtc { get; init; }
+}
 
 public sealed class DriverProfileInput
 {
@@ -113,6 +118,7 @@ public sealed record DeliveryJobDto(
     /// <summary>Only revealed to the assigned driver (null for open jobs).</summary>
     public double? DropoffLatitude { get; init; }
     public double? DropoffLongitude { get; init; }
+    public PreparationState PreparationState { get; init; }
 }
 
 public sealed record DriverDashboardDto(
@@ -180,4 +186,26 @@ public sealed class DeliverySettingsInput
     [StringLength(20)] public string? SupportPhone { get; set; }
     [StringLength(80)] public string ServiceArea { get; set; } = "";
     [Range(1, 10, ErrorMessage = "Từ 1 đến 10 đơn")] public int MaxActiveDeliveriesPerDriver { get; set; } = 2;
+    [Range(10, 120, ErrorMessage = "Từ 10 đến 120 giây")] public int OfferTimeoutSeconds { get; set; } = 30;
+    [Range(1, 50, ErrorMessage = "Từ 1 đến 50 km")] public int DispatchRadiusKm { get; set; } = 20;
+    [Range(1, 120, ErrorMessage = "Từ 1 đến 120 phút")] public int LocationFreshMinutes { get; set; } = 15;
+    [Range(1, 60, ErrorMessage = "Từ 1 đến 60 phút")] public int StoreConfirmTimeoutMinutes { get; set; } = 10;
+    [Range(1, 120, ErrorMessage = "Từ 1 đến 120 phút")] public int NoDriverAlertMinutes { get; set; } = 5;
+}
+
+// ---------------------------------------------------------------- Dispatch (GrabFood-style)
+
+/// <summary>A job offer shown to a driver with a countdown.</summary>
+public sealed record DispatchOfferDto(
+    int OfferId, int OrderId, string Code, string StoreName, string PickupAddress, double? PickupLatitude, double? PickupLongitude,
+    string DropoffAddress, int? DriverDistanceMeters, int? TripDistanceMeters, long DriverEarning, long CodAmount, int ItemCount,
+    DateTime OfferedAtUtc, DateTime ExpiresAtUtc, int TimeoutSeconds);
+
+public sealed record DispatchOfferHistoryDto(int OfferId, string DriverId, string DriverName, DispatchOfferStatus Status, int? DriverDistanceMeters, DateTime OfferedAtUtc, DateTime? RespondedAtUtc);
+
+public sealed record DispatchCycleResult(int OffersExpired, int OffersSent, int OrdersAutoCancelled, int Alerts);
+
+public sealed record DriverOfferStatsDto(int Offered, int Accepted, int Declined, int Expired)
+{
+    public int AcceptanceRatePercent => Offered == 0 ? 100 : Accepted * 100 / Offered;
 }

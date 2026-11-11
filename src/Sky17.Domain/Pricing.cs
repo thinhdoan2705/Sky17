@@ -17,6 +17,18 @@ public readonly record struct GeoPoint(double Latitude, double Longitude)
 {
     public bool IsValid => Latitude is >= -90 and <= 90 && Longitude is >= -180 and <= 180 && !(Latitude == 0 && Longitude == 0);
 
+    /// <summary>Great-circle (straight-line) distance in meters. For ranking nearby drivers only — never for pricing.</summary>
+    public int StraightLineMetersTo(GeoPoint other)
+    {
+        const double r = 6_371_000;
+        static double Rad(double d) => d * Math.PI / 180;
+        var dLat = Rad(other.Latitude - Latitude);
+        var dLng = Rad(other.Longitude - Longitude);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(Rad(Latitude)) * Math.Cos(Rad(other.Latitude)) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return (int)Math.Round(r * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a)));
+    }
+
     public static GeoPoint? From(double? lat, double? lng)
     {
         if (lat is null || lng is null) return null;

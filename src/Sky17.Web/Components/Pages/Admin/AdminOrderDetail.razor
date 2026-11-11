@@ -9,11 +9,11 @@ else
     <PageHeader Title="@($"Đơn {o.Code}")" Subtitle="@($"{o.StoreName} · đặt lúc {Fmt.Time(o.PlacedAtUtc)}")">
         <Actions>
             <OrderStatusBadge Status="o.Status" />
-            @if (o.Status is OrderStatus.ReadyForPickup or OrderStatus.Assigned)
+            @if (o.Status is OrderStatus.Confirmed or OrderStatus.Assigned or OrderStatus.ArrivedAtStore)
             {
-                <button class="btn" @onclick="OpenAssign">@(o.Status == OrderStatus.Assigned ? "↻ Phân công lại" : "+ Phân công tài xế")</button>
+                <button class="btn" @onclick="OpenAssign">@(o.DriverId is not null ? "↻ Phân công lại" : "+ Phân công thủ công")</button>
             }
-            @if (o.AllowedNextStatuses.Contains(OrderStatus.ReadyForPickup) && o.Status == OrderStatus.Assigned)
+            @if (o.Status is OrderStatus.Assigned or OrderStatus.ArrivedAtStore)
             {
                 <button class="btn btn-outline" @onclick="() => dialog = Dialog.Unassign">Gỡ tài xế</button>
             }
@@ -37,6 +37,13 @@ else
         </Actions>
     </PageHeader>
     @if (o.Status == OrderStatus.Cancelled) { <div class="alert alert-danger">Đã hủy: @o.CancelReason</div> }
+    @if (o.IsSearchingDriver)
+    {
+        <div class="alert alert-info searching">
+            <div class="radar">🛵</div>
+            <div>Đang tìm tài xế gần quán nhất · bắt đầu @Fmt.Ago(o.DispatchStartedAtUtc ?? o.PlacedAtUtc) · đã mời @o.Offers.Count lượt. Có thể phân công thủ công nếu chờ lâu.</div>
+        </div>
+    }
     @if (!string.IsNullOrEmpty(o.FailureReason)) { <div class="alert alert-warning">Lý do thất bại gần nhất: @o.FailureReason</div> }
     <div class="grid-2">
         <div class="stack">
@@ -48,9 +55,23 @@ else
                 {
                     <div class="row-item">
                         <div class="avatar">🛵</div>
-                        <div class="grow"><strong><a href="/admin/drivers/@a.DriverId">@a.DriverName</a> · @(a.SelfAccepted ? "Tự nhận" : "Admin phân công")</strong>
+                        <div class="grow"><strong><a href="/admin/drivers/@a.DriverId">@a.DriverName</a> · @(a.SelfAccepted ? "Nhận qua điều phối" : "Admin phân công")</strong>
                             <span class="small muted">@Fmt.Time(a.AssignedAtUtc) → @Fmt.Time(a.CompletedAtUtc) @(a.Note is null ? "" : "· " + a.Note)</span></div>
                         <StatusBadge Text="@(a.IsActive ? "Đang hoạt động" : a.Status.Text())" Variant="@(a.IsActive ? "" : a.Status == AssignmentStatus.Delivered ? "green" : "gray")" />
+                    </div>
+                }
+            </section>
+            <section class="card">
+                <h2>Điều phối · lời mời tài xế</h2>
+                @if (o.Offers.Count == 0) { <p class="muted">Chưa gửi lời mời nào.</p> }
+                @foreach (var f in o.Offers)
+                {
+                    <div class="row-item">
+                        <div class="grow">
+                            <strong><a href="/admin/drivers/@f.DriverId">@f.DriverName</a></strong>
+                            <span class="small muted">@Fmt.Time(f.OfferedAtUtc) · cách quán @Fmt.Distance(f.DriverDistanceMeters)@(f.RespondedAtUtc is { } r ? $" · phản hồi sau {(int)(r - f.OfferedAtUtc).TotalSeconds}s" : "")</span>
+                        </div>
+                        <StatusBadge Text="@f.Status.Text()" Variant="@f.Status.Css()" />
                     </div>
                 }
             </section>

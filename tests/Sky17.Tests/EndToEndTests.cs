@@ -81,26 +81,27 @@ public class EndToEndTests
         using (var s = app.As(seller))
         {
             var svc = s.Get<ISellerService>();
-            foreach (var st in new[] { OrderStatus.Confirmed, OrderStatus.Preparing, OrderStatus.ReadyForPickup })
-                await svc.ChangeOrderStatusAsync(storeId, order.OrderId, st, null);
+            await svc.ChangeOrderStatusAsync(storeId, order.OrderId, OrderStatus.Confirmed, null); // starts driver search
+            await svc.MarkFoodReadyAsync(storeId, order.OrderId);
         }
 
         // 8. Driver approval; unapproved driver cannot go online
         using (var d = app.As(driver)) await Assert.ThrowsAsync<DomainException>(() => d.Get<IDriverService>().SetOnlineAsync(true));
         using (var a = app.As(admin)) await a.Get<IAdminService>().SetDriverStatusAsync(driver.Id, DriverStatus.Active, null);
 
-        // 9-11. Driver accepts, picks up, delivers
+        // 9. Driver goes online with GPS; dispatcher rings the nearest free driver; driver accepts within 30 s
         using (var d = app.As(driver))
         {
             var svc = d.Get<IDriverService>();
             await svc.SetOnlineAsync(true);
-            Assert.Single(await svc.GetAvailableJobsAsync());
-            await svc.AcceptAsync(order.OrderId);
-            Assert.NotNull((await svc.GetJobAsync(order.OrderId)).CustomerPhone); // revealed to the assigned driver
-            await svc.ConfirmPickupAsync(order.OrderId);
-            await svc.StartDeliveryAsync(order.OrderId);
-            await svc.ConfirmDeliveredAsync(order.OrderId);
+            await svc.UpdateLocationAsync(10.9810, 106.6530);
         }
+        await app.AcceptViaDispatchAsync(driver, order.OrderId);
+        using (var d = app.As(driver))
+            Assert.NotNull((await d.Get<IDriverService>().GetJobAsync(order.OrderId)).CustomerPhone); // revealed to the assigned driver
+
+        // 10-11. Arrive at store → picked up → arrive at customer → delivered
+        await app.CompleteTripAsync(driver, order.OrderId);
 
         // 12. COD recorded; customer sees delivered + notifications persisted
         using (var c = app.As(customer))

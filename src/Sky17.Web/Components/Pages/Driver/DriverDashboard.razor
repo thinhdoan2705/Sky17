@@ -10,22 +10,18 @@ else
     <div class="page-head">
         <div>
             <h1>Xin chào, @profile.FullName! 🛵</h1>
-            <p class="muted" style="margin:0">Sẵn sàng cho những chuyến giao hàng hôm nay?</p>
+            <p class="muted" style="margin:0">Bật nhận chuyến, hệ thống sẽ gửi đơn gần bạn nhất.</p>
         </div>
         <StatusBadge Text="@($"● {profile.Status.Text()}")" Variant="@profile.Status.Css()" />
     </div>
 
     @if (profile.Status == DriverStatus.PendingApproval)
     {
-        <div class="alert alert-warning">⏳ Hồ sơ của bạn đang chờ quản trị viên duyệt. Bạn sẽ nhận được thông báo khi có thể bắt đầu nhận đơn.</div>
+        <div class="alert alert-warning">⏳ Hồ sơ của bạn đang chờ quản trị viên duyệt. Bạn sẽ nhận được thông báo khi có thể bắt đầu nhận chuyến.</div>
     }
     else if (profile.Status is DriverStatus.Suspended or DriverStatus.Rejected)
     {
         <div class="alert alert-danger">Tài khoản tài xế @profile.Status.Text().ToLower(): @profile.StatusReason</div>
-    }
-    else if (!d.IsOnline)
-    {
-        <div class="offline-banner">Bạn đang offline. Bật công tắc ở góc trên để nhận đơn mới.</div>
     }
 
     <div class="driver-summary">
@@ -35,44 +31,61 @@ else
         </div>
         <div class="numbers">
             <div><span style="color:#d7e7ff;font-size:11px">Thu nhập hôm nay</span><strong>@Fmt.Vnd(d.EarningToday)</strong></div>
-            <div><span style="color:#d7e7ff;font-size:11px">Đơn đang làm</span><strong>@d.ActiveCount/@d.MaxActive</strong></div>
-            <div><span style="color:#d7e7ff;font-size:11px">Đã hoàn thành</span><strong>@d.CompletedToday</strong></div>
+            <div><span style="color:#d7e7ff;font-size:11px">Chuyến hoàn thành</span><strong>@d.CompletedToday</strong></div>
+            <div><span style="color:#d7e7ff;font-size:11px">Tỷ lệ nhận (7 ngày)</span><strong>@(stats?.AcceptanceRatePercent ?? 100)%</strong></div>
         </div>
     </div>
 
     <div class="driver-grid">
         <div class="stack">
-            <section class="card">
-                <div class="section-title"><h2>Đơn của tôi 🛵</h2><span class="tag">@active.Count đang giao</span></div>
-                @if (active.Count == 0) { <EmptyState Icon="🛵" Title="Chưa có đơn đang giao" Text="Nhận đơn từ danh sách bên dưới." /> }
+            @if (active.Count > 0)
+            {
                 @foreach (var j in active)
                 {
-                    <DeliveryCard Job="j"><DriverJobActions Job="j" ShowDetailLink="true" OnChanged="ReloadAsync" /></DeliveryCard>
+                    <section class="card">
+                        <div class="section-title"><h2>Chuyến hiện tại</h2><OrderStatusBadge Status="j.Status" /></div>
+                        <DeliveryCard Job="j"><DriverJobActions Job="j" ShowDetailLink="true" OnChanged="ReloadAsync" /></DeliveryCard>
+                    </section>
                 }
-            </section>
-            <section class="card">
-                <div class="section-title"><h2>Đơn đang mở 📦</h2><a class="link" href="/driver/jobs">Xem tất cả (@d.AvailableJobs) →</a></div>
-                @if (available.Count == 0) { <EmptyState Icon="📭" Title="Chưa có đơn sẵn sàng" Text="Bạn sẽ nhận thông báo ngay khi có đơn mới." /> }
-                @foreach (var j in available.Take(3))
-                {
-                    <DeliveryCard Job="j"><DriverJobActions Job="j" CanAccept="CanAccept" OnChanged="ReloadAsync" /></DeliveryCard>
-                }
-            </section>
+            }
+            else if (d.IsOnline && profile.Status == DriverStatus.Active)
+            {
+                <section class="card text-center">
+                    <div class="radar">🛵</div>
+                    <h2>Đang tìm chuyến gần bạn...</h2>
+                    <p class="muted">Giữ ứng dụng mở để nhận chuyến. Khi có đơn, điện thoại sẽ đổ chuông và bạn có @offerSeconds giây để nhận.</p>
+                    @if (d.AvailableJobs > 0) { <span class="tag">@d.AvailableJobs đơn đang tìm tài xế trong hệ thống</span> }
+                </section>
+            }
+            else
+            {
+                <section class="card text-center">
+                    <div style="font-size:46px">😴</div>
+                    <h2>Bạn đang offline</h2>
+                    <p class="muted">Bật công tắc ở góc trên để bắt đầu nhận chuyến.</p>
+                </section>
+            }
         </div>
         <aside class="stack">
+            <div class="card">
+                <div class="section-title"><h2>Bản đồ</h2><span class="muted small">@profile.ServiceArea</span></div>
+                <MapView Markers="MapMarkers.ForDriver(active, profile)" ShowMyLocation="true" Height="300px" EmptyText="Bật nhận chuyến để hiển thị vị trí của bạn." />
+            </div>
             <div class="card">
                 <h2>💰 Ví COD</h2>
                 <div class="row-item"><span class="grow muted">Tiền mặt đang giữ</span><strong>@Fmt.Vnd(d.CodHolding)</strong></div>
                 <div class="row-item"><span class="grow muted">Cần nộp về Sky 17</span><strong class="danger-text">@Fmt.Vnd(d.OwedToPlatform)</strong></div>
-                <div class="row-item"><span class="grow muted">Thu nhập chưa đối soát</span><strong class="success-text">@Fmt.Vnd(d.CodHolding - d.OwedToPlatform)</strong></div>
-                <a class="btn btn-soft btn-block mt-1" href="/driver/earnings">Lịch sử thu hộ & đối soát</a>
+                <a class="btn btn-soft btn-block mt-1" href="/driver/earnings">Thu nhập & đối soát</a>
             </div>
-            <div class="card">
-                <div class="section-title"><h2>Bản đồ giao hàng</h2><span class="muted small">@profile.ServiceArea</span></div>
-                <MapView Markers="MapMarkers.ForDriver(active, available)" ShowMyLocation="true" Height="320px"
-                         EmptyText="Chưa có đơn nào có vị trí trên bản đồ." />
-                <p class="small muted mt-1">🏪 điểm lấy hàng · 🏠 điểm giao của bạn · 📦 đơn đang mở</p>
-            </div>
+            @if (stats is { Offered: > 0 })
+            {
+                <div class="card">
+                    <h2>Lời mời 7 ngày</h2>
+                    <div class="row-item"><span class="grow muted">Đã nhận</span><b class="success-text">@stats.Accepted</b></div>
+                    <div class="row-item"><span class="grow muted">Bỏ qua</span><b>@stats.Declined</b></div>
+                    <div class="row-item"><span class="grow muted">Hết giờ</span><b class="danger-text">@stats.Expired</b></div>
+                </div>
+            }
         </aside>
     </div>
 }
@@ -80,15 +93,15 @@ else
 @code {
     private DriverDashboardDto? d;
     private DriverProfileDto? profile;
+    private DriverOfferStatsDto? stats;
     private IReadOnlyList<DeliveryJobDto> active = [];
-    private IReadOnlyList<DeliveryJobDto> available = [];
-    private bool CanAccept => d is { IsOnline: true, Status: DriverStatus.Active } && d.ActiveCount < d.MaxActive;
+    private int offerSeconds = 30;
 
     protected override async Task LoadAsync()
     {
         profile = await Drivers.GetProfileAsync();
         d = await Drivers.GetDashboardAsync();
         active = await Drivers.GetMyActiveJobsAsync();
-        available = await Drivers.GetAvailableJobsAsync();
+        stats = await Drivers.GetOfferStatsAsync();
     }
 }
