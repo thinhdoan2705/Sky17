@@ -41,15 +41,15 @@ Seeded only when `ASPNETCORE_ENVIRONMENT=Development`. The password is **not in 
 Demo data includes delivered orders over the last 7 days (dashboards, COD balances) and live orders: one waiting for the store (Pending), one searching for a driver (Confirmed), one with the driver at the store (Vũ Anh) and one being delivered (Lê Hoàng).
 
 ## Order flow (GrabFood style)
-Customer orders → **store accepts** → the dispatcher immediately offers the order to the **nearest free online driver** (fresh GPS, within radius). The driver gets a **ringing full-screen popup** and has **30 s** to accept; decline/timeout → next nearest driver. Driver steps: *đến quán → lấy món → đến nơi giao → giao & thu COD*. Stores press *Món đã sẵn sàng*; customers see the driver live on the map. Stores that never answer are auto-cancelled; admins are alerted when no driver is found and can assign manually.
+Customer orders → **store receives a ringing fullscreen popup** (sound, vibration, system notification; handles multiple orders simultaneously, bulk accept or reject with reasons) → **store accepts** → the dispatcher immediately offers the order to the **nearest free online driver** (fresh GPS, within radius). The driver gets a **ringing full-screen popup** and has **30 s** to accept; decline/timeout → next nearest driver. Driver steps: *đến quán → lấy món → đến nơi giao → giao & thu COD*. Stores press *Món đã sẵn sàng*; customers see the driver live on the map. Stores that never answer are auto-cancelled; admins are alerted when no driver is found and can assign manually.
 
-Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLOW.md)**.
+Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLOW.md)** & **[docs/SELLER_INCOMING_ORDERS.md](docs/SELLER_INCOMING_ORDERS.md)**.
 
 ## Portals
 | URL | Who | Highlights |
 |---|---|---|
 | `/` | Public / Customer | Home, dish search grouped by store (nearest first, km shown), stores, product, one cart per store, checkout per store (COD), tracking timeline, order history, addresses, profile, notifications |
-| `/seller` | Seller (Owner/Staff) | Dashboard, incoming orders (accept/reject, “Món đã sẵn sàng”, live driver progress), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
+| `/seller` | Seller (Owner/Staff) | Dashboard, ringing incoming orders panel (sound, multi-order accept/reject, “Món đã sẵn sàng”, live driver progress), products CRUD + images + stock, categories, sales report, settlements, store profile & hours, members |
 | `/driver` | Driver | Online/offline + GPS heartbeat, ringing 30 s offer popup (accept/decline), trip steps (đến quán → lấy món → đến nơi → giao), cancel trip, failure report, maps & navigation, earnings & COD wallet, trip history, profile |
 | `/admin` | Admin | Live KPIs, orders (filter/paging/timeline/assign/reassign/cancel/failed review/distance override), stores & drivers approval, customers, COD & settlements, users & roles, settings, audit log, notification history |
 | `/login` · `/seller/login` · `/driver/login` · `/admin/login` | Per portal | Separate login pages; each accepts only accounts with that role (customers: phone number, partners: e-mail) |

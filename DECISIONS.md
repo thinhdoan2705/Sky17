@@ -92,3 +92,11 @@ Global limiter: POSTs to `/Account/*` 10/min per IP (credential stuffing); other
 - `DeliveryAddressDetail` (where exactly to go) is separate from `DeliveryNote` (instructions for the order: call first, less ice…). The detail, like the customer's phone, is shown to a driver only after they accept the trip.
 - Migration `StructuredAddress` drops `Addresses.District` after appending its text to `Street`, so old addresses still read correctly; they have no codes and the UI asks the customer to re-select the ward (they cannot be mapped reliably because wards were merged in 2025).
 - Store addresses are still free text (see TASKS.md).
+
+## D17. Seller incoming-orders ringing panel (GrabFood Merchant style)
+- **Problem**: When customers place orders, store staff need immediate audio-visual alerts without having to refresh the page or keep checking the order table. If multiple customers order at the same time, the store must see and handle all of them in one place.
+- **Solution**: A full-screen ringing backdrop (`SellerIncomingOrders.razor`) placed in `SellerLayout.razor` so it is active across all `/seller/*` pages.
+- **Audio & Alert**: Shared `ringer.js` using Web Audio API (two-tone chime loop at 880Hz/660Hz), mobile vibration, and Desktop Notification API. Auto-unlocked on user gesture.
+- **Multi-order & Concurrency**: Displays all `Pending` orders across all stores the user belongs to. Provides "✓ Nhận tất cả (N)" and per-order "✓ Nhận đơn" / "✕ Từ chối" (with reason chips). Each order is processed independently via a concurrent `busy` set. Optimistic concurrency and transaction guards ensure that if another staff member or customer acts first, the error is handled gracefully without crashing the Blazor circuit. Accepting an order immediately notifies other store staff (`order_handled`) to close it from their panels and kicks off dispatch (`DispatchOrderAsync`).
+- Full specification: [docs/SELLER_INCOMING_ORDERS.md](docs/SELLER_INCOMING_ORDERS.md).
+

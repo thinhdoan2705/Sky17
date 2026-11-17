@@ -88,6 +88,11 @@ public interface ISellerService
     Task<OrderDetailDto> GetOrderAsync(int storeId, int orderId, CancellationToken ct = default);
     Task ChangeOrderStatusAsync(int storeId, int orderId, OrderStatus target, string? reason, CancellationToken ct = default);
     Task MarkFoodReadyAsync(int storeId, int orderId, CancellationToken ct = default);
+    /// <summary>All orders waiting for acceptance in every store the current user belongs to (oldest first).</summary>
+    Task<IReadOnlyList<IncomingOrderDto>> GetIncomingOrdersAsync(CancellationToken ct = default);
+    /// <summary>Accept or reject an order that is still waiting for the store. Fails if someone already handled it
+    /// (another staff member, the customer or the auto-cancel), so a stale panel can never cancel an accepted order.</summary>
+    Task RespondToIncomingAsync(int storeId, int orderId, bool accept, string? reason, CancellationToken ct = default);
 
     Task<SalesReportDto> GetSalesReportAsync(int storeId, DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<IReadOnlyList<SettlementDto>> GetSettlementsAsync(int storeId, CancellationToken ct = default);

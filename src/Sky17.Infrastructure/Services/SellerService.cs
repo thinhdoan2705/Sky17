@@ -299,7 +299,16 @@ public sealed class SellerService(
         return await OrderQueries.LoadDetailAsync(db, orderId, OrderActor.Seller, ct);
     }
 
-    public async Task ChangeOrderStatusAsync(int storeId, int orderId, OrderStatus target, string? reason, CancellationToken ct = default)
+    public Task ChangeOrderStatusAsync(int storeId, int orderId, OrderStatus target, string? reason, CancellationToken ct = default) =>
+        ChangeStatusCoreAsync(storeId, orderId, target, reason, null, ct);
+
+    public Task RespondToIncomingAsync(int storeId, int orderId, bool accept, string? reason, CancellationToken ct = default)
+    {
+        if (!accept && string.IsNullOrWhiteSpace(reason)) throw new DomainException("Vui lòng chọn lý do từ chối đơn.");
+        return ChangeStatusCoreAsync(storeId, orderId, accept ? OrderStatus.Confirmed : OrderStatus.Cancelled, accept ? null : reason!.Trim(), OrderStatus.Pending, ct);
+    }
+
+    private async Task ChangeStatusCoreAsync(int storeId, int orderId, OrderStatus target, string? reason, OrderStatus? expected, CancellationToken ct)
     {
         if (!SellerTargets.Contains(target)) throw new ForbiddenException();
         await using var db = await dbf.CreateDbContextAsync(ct);
@@ -307,12 +316,37 @@ public sealed class SellerService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var order = await OrderWorkflow.WithWorkflowGraph(db.Orders).FirstOrDefaultAsync(o => o.Id == orderId && o.StoreId == storeId, ct)
             ?? throw new NotFoundException("Không tìm thấy đơn hàng của cửa hàng.");
+        if (expected is { } exp && order.Status != exp)
+            throw new DomainException(order.Status == OrderStatus.Cancelled
+                ? "Đơn đã bị hủy (khách hủy hoặc quá thời gian xác nhận)."
+                : "Đơn đã được cửa hàng xử lý trước đó.");
         await workflow.ApplyAsync(db, order, target, OrderActor.Seller, uid, reason, ct);
         await db.SaveAsync(ct);
         await tx.CommitAsync(ct);
         await notifier.OrderStatusChangedAsync(orderId, ct);
+        // Other members of the store close this order in their incoming-orders panel immediately.
+        var members = await db.StoreMembers.AsNoTracking().Where(m => m.StoreId == storeId && m.UserId != uid).Select(m => m.UserId).ToListAsync(ct);
+        if (members.Count > 0)
+            await notifier.PushAsync(members, new RealtimeMessage("order_handled", "Đơn đã được xử lý", $"Đơn {order.Code} đã được xử lý.", null, orderId), ct);
         // Store accepted → start looking for the nearest free driver right away.
         if (target == OrderStatus.Confirmed) await dispatch.DispatchOrderAsync(orderId, ct);
+    }
+
+    public async Task<IReadOnlyList<IncomingOrderDto>> GetIncomingOrdersAsync(CancellationToken ct = default)
+    {
+        var uid = (await users.GetAsync(ct)).RequireRole(Roles.Seller);
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var timeout = (await Settings.DispatchAsync(db, ct)).StoreConfirmTimeoutMinutes;
+        var storeIds = db.StoreMembers.Where(m => m.UserId == uid).Select(m => m.StoreId);
+        var orders = await db.Orders.AsNoTracking().Include(o => o.Items).Include(o => o.Store)
+            .Where(o => o.Status == OrderStatus.Pending && storeIds.Contains(o.StoreId))
+            .OrderBy(o => o.PlacedAtUtc).Take(50)
+            .ToListAsync(ct);
+        return orders.Select(o => new IncomingOrderDto(
+            o.Id, o.Code, o.StoreId, o.PickupStoreName, o.Store.Emoji, o.RecipientName,
+            o.Items.OrderBy(i => i.Id).Select(i => new OrderItemDto(i.ProductId, i.ProductName, i.Emoji, i.UnitPrice, i.Quantity, i.LineTotal)).ToList(),
+            o.ProductTotal, o.GrandTotal, o.DeliveryAddress, o.DeliveryNote, o.DistanceMeters,
+            o.PlacedAtUtc, o.PlacedAtUtc.AddMinutes(timeout))).ToList();
     }
 
     public async Task MarkFoodReadyAsync(int storeId, int orderId, CancellationToken ct = default)

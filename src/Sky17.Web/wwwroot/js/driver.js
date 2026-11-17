@@ -1,11 +1,8 @@
-// Driver app helpers: GPS heartbeat, ringing offer alert (Web Audio + vibration + system notification).
+// Driver app helpers: GPS heartbeat; ringing offer alert re-exported from ringer.js.
 let watchId = null;
 let heartbeat = null;
 let last = null;            // last known position {lat,lng,acc}
 let ref = null;
-let audioCtx = null;
-let ringTimer = null;
-let notification = null;
 const HEARTBEAT_MS = 20000;
 
 function send() {
@@ -45,60 +42,8 @@ export function stopTracking() {
     last = null;
 }
 
-/** Must be called from a user gesture (e.g. the online switch) so the browser allows sound later. */
-export async function unlock() {
-    try {
-        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') await audioCtx.resume();
-    } catch { }
-    try {
-        if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
-    } catch { }
-}
-
-function beep() {
-    if (!audioCtx) return;
-    const t = audioCtx.currentTime;
-    // Two-tone "ding-dong" like a ride-hailing app.
-    [[880, 0], [660, 0.22]].forEach(([freq, offset]) => {
-        const o = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        o.type = 'sine';
-        o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, t + offset);
-        g.gain.exponentialRampToValueAtTime(0.5, t + offset + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.2);
-        o.connect(g).connect(audioCtx.destination);
-        o.start(t + offset);
-        o.stop(t + offset + 0.22);
-    });
-}
-
-/** Start ringing until stopRing() is called. */
-export function ring(title, body) {
-    stopRing();
-    try { if (audioCtx?.state === 'suspended') audioCtx.resume(); } catch { }
-    beep();
-    ringTimer = setInterval(() => {
-        beep();
-        try { navigator.vibrate?.([300, 150, 300]); } catch { }
-    }, 1200);
-    try { navigator.vibrate?.([400, 200, 400, 200, 400]); } catch { }
-    try {
-        if ('Notification' in window && Notification.permission === 'granted') {
-            notification = new Notification(title, { body, tag: 'sky17-offer', renotify: true, requireInteraction: true });
-            notification.onclick = () => { window.focus(); notification?.close(); };
-        }
-    } catch { }
-}
-
-export function stopRing() {
-    if (ringTimer) clearInterval(ringTimer);
-    ringTimer = null;
-    try { navigator.vibrate?.(0); } catch { }
-    try { notification?.close(); } catch { }
-    notification = null;
-}
+// Sound/vibration/notification alert lives in ringer.js (shared with the seller incoming-orders panel).
+export { unlock, ring, stopRing } from "./ringer.js";
 
 export function getMode() {
     try { return localStorage.getItem('sky17-driver-location-mode') || 'gps'; } catch { return 'gps'; }

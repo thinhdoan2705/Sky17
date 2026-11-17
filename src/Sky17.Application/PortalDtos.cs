@@ -5,6 +5,15 @@ namespace Sky17.Application;
 
 // ---------------------------------------------------------------- Seller
 
+/// <summary>An order waiting for the store to accept or reject (seller ringing panel).</summary>
+public sealed record IncomingOrderDto(
+    int OrderId, string Code, int StoreId, string StoreName, string StoreEmoji, string RecipientName,
+    IReadOnlyList<OrderItemDto> Items, long ProductTotal, long GrandTotal, string DeliveryAddress, string? DeliveryNote,
+    int? DistanceMeters, DateTime PlacedAtUtc, DateTime AutoCancelAtUtc)
+{
+    public int ItemCount => Items.Sum(i => i.Quantity);
+}
+
 public sealed record MyStoreDto(int StoreId, string Name, string Emoji, StoreStatus Status, StoreMemberRole Role);
 
 public sealed record SellerDashboardDto(

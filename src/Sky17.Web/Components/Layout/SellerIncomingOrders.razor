@@ -1,0 +1,310 @@
+@* Ringing "new orders" panel for sellers (GrabFood Merchant style). Lives in the seller layout:
+   shows every Pending order of all the user's stores at once, each with Accept / Reject. *@
+@implements IAsyncDisposable
+@inject ISellerService Seller
+@inject RealtimeState Realtime
+@inject ToastService Toasts
+@inject IJSRuntime JS
+
+@if (orders.Count > 0)
+{
+    @if (open)
+    {
+        <div class="incoming-backdrop" role="alertdialog" aria-modal="true" aria-label="Đơn hàng mới đang chờ nhận">
+            <div class="incoming-panel">
+                <div class="incoming-head">
+                    <div class="grow">
+                        <div class="incoming-kicker"><span class="ring-dot"></span> ĐƠN MỚI ĐANG CHỜ NHẬN</div>
+                        <h2>@orders.Count đơn hàng mới</h2>
+                    </div>
+                    @if (orders.Count > 1)
+                    {
+                        <button class="btn btn-green" disabled="@(busy.Count > 0)" @onclick="AcceptAllAsync">✓ Nhận tất cả (@orders.Count)</button>
+                    }
+                    <button class="close" aria-label="Thu nhỏ" title="Thu nhỏ (chuông vẫn reo)" @onclick="() => open = false">—</button>
+                </div>
+                @if (!soundOn)
+                {
+                    <button class="incoming-sound" @onclick="UnlockAsync">🔇 Trình duyệt đang chặn âm thanh — bấm để bật chuông</button>
+                }
+                else
+                {
+                    <div class="incoming-tools">
+                        <button class="btn btn-ghost btn-sm" @onclick="ToggleMuteAsync">@(muted ? "🔔 Bật lại chuông" : "🔕 Tắt chuông đến khi có đơn mới")</button>
+                    </div>
+                }
+                <div class="incoming-list">
+                    @foreach (var o in orders)
+                    {
+                        var left = o.AutoCancelAtUtc - DateTime.UtcNow;
+                        <article class="incoming-card @(newIds.Contains(o.OrderId) ? "is-new" : "")">
+                            <div class="incoming-card-head">
+                                <div class="grow">
+                                    <b>#@o.Code</b>
+                                    @if (multiStore) { <span class="tag">@o.StoreEmoji @o.StoreName</span> }
+                                    <div class="small muted">@o.RecipientName · đặt @Ago(o.PlacedAtUtc)@(o.DistanceMeters is { } m ? $" · {Fmt.Distance(m)}" : "")</div>
+                                </div>
+                                <span class="incoming-timer @(left.TotalMinutes < 2 ? "urgent" : "")" title="Tự hủy nếu quán không nhận">
+                                    ⏱ @(left > TimeSpan.Zero ? $"{(int)left.TotalMinutes}:{left.Seconds:00}" : "0:00")
+                                </span>
+                            </div>
+                            <ul class="incoming-items">
+                                @foreach (var i in o.Items) { <li><b>@i.Quantity×</b> @i.Name</li> }
+                            </ul>
+                            @if (!string.IsNullOrEmpty(o.DeliveryNote)) { <div class="alert alert-info small">📝 @o.DeliveryNote</div> }
+                            <div class="incoming-total"><span class="muted small">@o.ItemCount món · tiền món</span><b>@Fmt.Vnd(o.ProductTotal)</b></div>
+
+                            @if (rejecting == o.OrderId)
+                            {
+                                <div class="incoming-reject">
+                                    <div class="small muted">Lý do từ chối (khách sẽ nhận được):</div>
+                                    <div class="chips">
+                                        @foreach (var r in Reasons)
+                                        {
+                                            <button type="button" class="chip @(reason == r ? "active" : "")" @onclick="() => reason = r">@r</button>
+                                        }
+                                    </div>
+                                    <input class="search" placeholder="Hoặc nhập lý do khác…" @bind="reason" @bind:event="oninput" maxlength="200" />
+                                    <div class="incoming-actions">
+                                        <button class="btn btn-outline" @onclick="() => rejecting = null">Quay lại</button>
+                                        <button class="btn btn-danger" disabled="@(busy.Contains(o.OrderId) || string.IsNullOrWhiteSpace(reason))" @onclick="() => RejectAsync(o)">
+                                            @if (busy.Contains(o.OrderId)) { <span class="spinner"></span> }
+                                            Xác nhận từ chối
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="incoming-actions">
+                                    <button class="btn btn-outline danger-text" disabled="@busy.Contains(o.OrderId)" @onclick="() => StartReject(o.OrderId)">✕ Từ chối</button>
+                                    <a class="btn btn-ghost" href="/seller/orders/@o.OrderId" @onclick="() => open = false">Chi tiết</a>
+                                    <button class="btn btn-green incoming-accept" disabled="@busy.Contains(o.OrderId)" @onclick="() => AcceptAsync(o)">
+                                        @if (busy.Contains(o.OrderId)) { <span class="spinner"></span> }
+                                        ✓ Nhận đơn
+                                    </button>
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <button class="incoming-pill" @onclick="() => open = true" aria-label="Mở danh sách đơn mới">
+            <span class="ring-dot"></span> 🔔 @orders.Count đơn mới đang chờ nhận
+        </button>
+    }
+}
+
+@code {
+    private static readonly string[] Reasons = ["Hết món", "Quán đang quá tải", "Sắp đóng cửa", "Không giao được khu vực này"];
+
+    private List<IncomingOrderDto> orders = [];
+    private readonly HashSet<int> known = [];
+    private readonly HashSet<int> newIds = [];
+    private readonly HashSet<int> busy = [];
+    private bool open;
+    private bool muted;
+    private bool ringing;
+    private bool soundOn = true;
+    private bool multiStore;
+    private int? rejecting;
+    private string? reason;
+    private Timer? timer;
+    private int ticks;
+    private IJSObjectReference? module;
+    private bool firstLoad = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Realtime.Changed += OnRealtime;
+        await LoadAsync();
+        // Countdown every second; safety-net poll every 5 s in case a realtime message is missed.
+        timer = new Timer(_ => InvokeAsync(TickAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ringer.js");
+            await UpdateRingAsync(orders.Count > 0);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException) { }
+    }
+
+    private async Task TickAsync()
+    {
+        ticks++;
+        if (ticks % 5 == 0) await LoadAsync();
+        if (module is not null && orders.Count > 0 && ticks % 2 == 0)
+        {
+            try { soundOn = await module.InvokeAsync<bool>("isUnlocked"); } catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+        }
+        if (orders.Count > 0) StateHasChanged();
+    }
+
+    private Task OnRealtime(RealtimeMessage? m) =>
+        m is null || m.Type is "order" or "order_handled" ? InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }) : Task.CompletedTask;
+
+    private async Task LoadAsync()
+    {
+        IReadOnlyList<IncomingOrderDto> next;
+        try { next = await Seller.GetIncomingOrdersAsync(); }
+        catch (Exception ex) when (ex is ForbiddenException or NotFoundException) { return; }
+
+        var arrived = next.Where(o => !known.Contains(o.OrderId)).Select(o => o.OrderId).ToList();
+        orders = next.ToList();
+        multiStore = orders.Select(o => o.StoreId).Distinct().Count() > 1;
+        known.IntersectWith(orders.Select(o => o.OrderId));
+        foreach (var id in arrived) known.Add(id);
+        newIds.Clear();
+        if (!firstLoad) foreach (var id in arrived) newIds.Add(id);
+        if (rejecting is { } r && orders.All(o => o.OrderId != r)) { rejecting = null; reason = null; }
+
+        if (arrived.Count > 0)
+        {
+            // A new order always pops the panel up and rings again, even if muted or minimized.
+            open = true;
+            muted = false;
+            await UpdateRingAsync(true, restart: true, arrived.Count);
+        }
+        else if (orders.Count == 0)
+        {
+            open = false;
+            await UpdateRingAsync(false);
+        }
+        firstLoad = false;
+    }
+
+    private async Task UpdateRingAsync(bool shouldRing, bool restart = false, int arrivedCount = 0)
+    {
+        if (module is null) return;
+        try
+        {
+            if (shouldRing && !muted && (restart || !ringing))
+            {
+                var title = arrivedCount > 1 ? $"🛎️ {arrivedCount} đơn hàng mới - Sky 17" : "🛎️ Có đơn hàng mới - Sky 17";
+                var body = orders.Count == 1 ? $"#{orders[0].Code} · {orders[0].ItemCount} món · {Fmt.Vnd(orders[0].ProductTotal)}" : $"{orders.Count} đơn đang chờ cửa hàng nhận";
+                await module.InvokeVoidAsync("ring", title, body, "sky17-store-order");
+                ringing = true;
+            }
+            else if ((!shouldRing || muted) && ringing)
+            {
+                await module.InvokeVoidAsync("stopRing");
+                ringing = false;
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+    }
+
+    private async Task UnlockAsync()
+    {
+        if (module is null) return;
+        try
+        {
+            soundOn = await module.InvokeAsync<bool>("unlock");
+            ringing = false;
+            await UpdateRingAsync(orders.Count > 0);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+    }
+
+    private async Task ToggleMuteAsync()
+    {
+        muted = !muted;
+        if (muted) await UpdateRingAsync(false);
+        else { ringing = false; await UpdateRingAsync(orders.Count > 0); }
+    }
+
+    private void StartReject(int orderId)
+    {
+        rejecting = orderId;
+        reason = null;
+    }
+
+    private Task AcceptAsync(IncomingOrderDto o) =>
+        HandleAsync(o, () => Seller.RespondToIncomingAsync(o.StoreId, o.OrderId, true, null), $"Đã nhận đơn #{o.Code} · đang tìm tài xế");
+
+    private Task RejectAsync(IncomingOrderDto o)
+    {
+        var why = reason?.Trim();
+        if (string.IsNullOrEmpty(why)) return Task.CompletedTask;
+        return HandleAsync(o, () => Seller.RespondToIncomingAsync(o.StoreId, o.OrderId, false, why), $"Đã từ chối đơn #{o.Code}");
+    }
+
+    /// <summary>Each order is handled independently, so several orders can be processed at the same time.</summary>
+    private async Task HandleAsync(IncomingOrderDto o, Func<Task> action, string success, bool reload = true)
+    {
+        if (!busy.Add(o.OrderId)) return;
+        try
+        {
+            await action();
+            Toasts.Success(success);
+            if (rejecting == o.OrderId) { rejecting = null; reason = null; }
+        }
+        catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException)
+        {
+            // Typically: the customer cancelled, another staff member handled it, or it auto-cancelled.
+            Toasts.Error($"#{o.Code}: {ex.Message}");
+        }
+        finally
+        {
+            busy.Remove(o.OrderId);
+        }
+        if (reload)
+        {
+            await LoadAsync();
+            await Realtime.RaiseAsync(null); // refresh the dashboard / orders page underneath
+        }
+    }
+
+    private async Task AcceptAllAsync()
+    {
+        var batch = orders.ToList();
+        var accepted = 0;
+        foreach (var o in batch)
+        {
+            if (!busy.Add(o.OrderId)) continue;
+            try
+            {
+                await Seller.RespondToIncomingAsync(o.StoreId, o.OrderId, true, null);
+                accepted++;
+            }
+            catch (Exception ex) when (ex is DomainException or ForbiddenException or NotFoundException or ConcurrencyConflictException)
+            {
+                Toasts.Error($"#{o.Code}: {ex.Message}");
+            }
+            finally { busy.Remove(o.OrderId); }
+            StateHasChanged();
+        }
+        if (accepted > 0) Toasts.Success($"Đã nhận {accepted} đơn · đang tìm tài xế");
+        await LoadAsync();
+        await Realtime.RaiseAsync(null);
+    }
+
+    private static string Ago(DateTime utc)
+    {
+        var s = (DateTime.UtcNow - utc).TotalSeconds;
+        return s < 60 ? "vừa xong" : s < 3600 ? $"{(int)(s / 60)} phút trước" : Fmt.Time(utc);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Realtime.Changed -= OnRealtime;
+        timer?.Dispose();
+        try
+        {
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("stopRing");
+                await module.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+    }
+}

@@ -27,6 +27,7 @@
 </PortalShell>
 <ToastHost />
 <RealtimeListener />
+<SellerIncomingOrders />
 
 @code {
     private IReadOnlyList<PortalShell.NavItem> Items => Ctx.Current?.Role == StoreMemberRole.Staff ? staffItems : ownerItems;
