@@ -81,7 +81,7 @@ else
             mode = await module.InvokeAsync<string>("getMode");
             StateHasChanged();
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 
     private async Task SetModeAsync(string m)

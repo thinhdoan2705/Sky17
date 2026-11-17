@@ -1,7 +1,7 @@
 @* Desktop sidebar + topbar, mobile bottom tabs. Shared by Admin and Seller portals. *@
 <div class="shell">
     <aside class="sidebar">
-        <a href="@HomeHref" class="logo"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
+        <a href="@HomeHref" class="logo"><span class="logo-mark"><Icon Name="bolt" Size="20" Stroke="2.2" /></span>SHIP <em>SKY 17</em></a>
         @SidebarTop
         <div>
             <div class="menu-caption">ĐIỀU HƯỚNG</div>
@@ -9,7 +9,7 @@
                 @foreach (var item in Items)
                 {
                     <NavLink href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)" ActiveClass="active">
-                        <span>@item.Icon</span>@item.Text
+                        <Icon Name="@item.Icon" Size="20" /><span class="menu-text">@item.Text</span>
                         @if (item.Badge > 0) { <span class="badge-dot" style="position:static;margin-left:auto">@item.Badge</span> }
                     </NavLink>
                 }
@@ -22,7 +22,7 @@
     </aside>
     <main class="main">
         <header class="topbar">
-            <a href="@HomeHref" class="mobile-head logo" style="padding:0"><span class="logo-mark">⚡</span><span>SKY <em>17</em></span></a>
+            <a href="@HomeHref" class="mobile-head logo" style="padding:0"><span class="logo-mark"><Icon Name="bolt" Size="18" Stroke="2.2" /></span><span>SKY <em>17</em></span></a>
             <span class="breadcrumb">@Breadcrumb</span>
             <div class="toolbar">
                 @TopbarExtra
@@ -38,7 +38,7 @@
 <nav class="mobile-tabs" aria-label="Điều hướng chính">
     @foreach (var item in Items.Where(i => i.Mobile).Take(5))
     {
-        <NavLink href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)" ActiveClass="active"><span>@item.Icon</span>@(item.ShortText ?? item.Text)</NavLink>
+        <NavLink href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)" ActiveClass="active"><Icon Name="@item.Icon" /><span>@(item.ShortText ?? item.Text)</span></NavLink>
     }
 </nav>
 

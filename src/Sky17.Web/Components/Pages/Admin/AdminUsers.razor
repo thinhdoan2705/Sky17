@@ -6,7 +6,7 @@
 
 <div class="card">
     <div class="table-toolbar">
-        <input class="search" placeholder="⌕ Tên hoặc email..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm tài khoản" />
+        <input class="search" placeholder="Tên hoặc email..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm tài khoản" />
         <select class="filter" @bind="role" @bind:after="Filter" aria-label="Vai trò">
             <option value="">Tất cả vai trò</option>
             @foreach (var r in Roles.All) { <option value="@r">@Labels.RoleText(r)</option> }

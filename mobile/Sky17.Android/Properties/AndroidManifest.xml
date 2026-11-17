@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <!-- Driver GPS heartbeat, "vị trí hiện tại" in search, map pins. -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- Ringing alert for new trips (driver) and new orders (store). -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <!-- Driver/store apps stay connected while in the background (foreground service + partial wake lock). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <!-- usesCleartextTraffic: allows http:// servers (LAN / testing). Production should use https://
+       (browsers only allow GPS on https or localhost). -->
+  <application android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
+    <service android:name="sky17.app.KeepAliveService" android:exported="false" android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the realtime connection open so drivers and stores are alerted immediately about new delivery jobs and orders." />
+    </service>
+  </application>
+</manifest>

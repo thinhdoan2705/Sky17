@@ -5,7 +5,7 @@
         <div class="dialog @(Wide ? "dialog-wide" : "")" role="dialog" aria-modal="true" aria-label="@Title" @onclick:stopPropagation="true">
             <div class="dialog-header">
                 <h2>@Title</h2>
-                <button class="close" aria-label="Đóng" @onclick="Close">✕</button>
+                <button class="close" aria-label="Đóng" @onclick="Close"><Icon Name="xmark" Size="14" Stroke="2.6" /></button>
             </div>
             @ChildContent
         </div>

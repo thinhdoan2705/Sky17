@@ -19,7 +19,7 @@
             self = DotNetObjectReference.Create(this);
             await module.InvokeVoidAsync("start", self);
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 
     [JSInvokable]
@@ -42,7 +42,7 @@
                 await module.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
         self?.Dispose();
     }
 }

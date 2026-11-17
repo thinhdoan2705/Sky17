@@ -11,7 +11,7 @@
     </div>
     <div class="card">
         <div class="table-toolbar">
-            <input class="search" placeholder="⌕ Tìm mã đơn, khách hàng, SĐT..." @bind="search" @bind:event="oninput" @bind:after="Search" aria-label="Tìm đơn" />
+            <input class="search" placeholder="Tìm mã đơn, khách hàng, SĐT..." @bind="search" @bind:event="oninput" @bind:after="Search" aria-label="Tìm đơn" />
             <span class="muted small">Tự động cập nhật khi có đơn mới</span>
         </div>
         @if (Loading) { <Skeleton Lines="5" /> }

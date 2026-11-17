@@ -26,6 +26,8 @@ function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+const NO_ANIM = { animate: false };
+
 function ensureMap(el, opts) {
     if (el._sky) return el._sky;
     const map = L.map(el, { zoomControl: true, attributionControl: true, scrollWheelZoom: opts?.scrollZoom ?? false })
@@ -34,7 +36,7 @@ function ensureMap(el, opts) {
     const layer = L.layerGroup().addTo(map);
     el._sky = { map, layer, me: null };
     // Maps created inside dialogs/tabs need a size recalculation once visible.
-    setTimeout(() => map.invalidateSize(), 250);
+    setTimeout(() => { if (el._sky?.map === map && el.isConnected) map.invalidateSize({ animate: false }); }, 250);
     return el._sky;
 }
 
@@ -62,11 +64,14 @@ export async function render(el, data) {
         if (m.label) mk.bindPopup(escapeHtml(m.label));
     }
     if (s.me) pts.push(s.me.getLatLng());
-    if (pts.length === 0) { s.map.setView(DEFAULT_CENTER, 12); return; }
-    if (pts.length === 1) s.map.setView(pts[0], 15); else s.map.fitBounds(L.latLngBounds(pts), { padding: [36, 36] });
+    // Programmatic moves are not animated: Blazor may remove the map element at any time (page change),
+    // and a running Leaflet animation on a removed element throws ("_leaflet_pos").
+    if (pts.length === 0) { s.map.setView(DEFAULT_CENTER, 12, NO_ANIM); return; }
+    if (pts.length === 1) s.map.setView(pts[0], 15, NO_ANIM); else s.map.fitBounds(L.latLngBounds(pts), { padding: [36, 36], animate: false });
     if (data.route && data.markers?.length >= 2) {
         const a = [data.markers[0].lat, data.markers[0].lng], b = [data.markers[1].lat, data.markers[1].lng];
         const geo = await routeGeometry(a, b);
+        if (el._sky !== s || !el.isConnected) return; // map disposed while the route was loading
         if (geo) {
             L.polyline(geo, { color: '#1769e0', weight: 5, opacity: .8 }).addTo(s.layer);
         } else {
@@ -79,11 +84,11 @@ export async function render(el, data) {
 /** Show the browser's current position as a 🛵 marker. Returns {lat,lng} or null. */
 export async function showMe(el) {
     const pos = await locate();
-    if (!pos || !el?._sky) return pos;
+    if (!pos || !el?._sky || !el.isConnected) return pos;
     const s = el._sky;
     if (s.me) s.me.setLatLng([pos.lat, pos.lng]);
     else s.me = L.marker([pos.lat, pos.lng], { icon: icon('me') }).bindPopup('Vị trí của bạn').addTo(s.map);
-    s.map.setView([pos.lat, pos.lng], 15);
+    s.map.setView([pos.lat, pos.lng], 15, NO_ANIM);
     return pos;
 }
 
@@ -105,7 +110,7 @@ function place(el, lat, lng, notify) {
     } else {
         s.pin.setLatLng([lat, lng]);
     }
-    s.map.setView([lat, lng], Math.max(s.map.getZoom(), 16));
+    s.map.setView([lat, lng], Math.max(s.map.getZoom(), 16), NO_ANIM);
     if (notify) s.dotnet?.invokeMethodAsync('OnPicked', lat, lng);
 }
 
@@ -142,5 +147,8 @@ export function locate() {
 }
 
 export function dispose(el) {
-    if (el?._sky) { el._sky.map.remove(); el._sky = null; }
+    if (!el?._sky) return;
+    const map = el._sky.map;
+    el._sky = null;
+    try { map.stop(); map.off(); map.remove(); } catch { /* element already detached */ }
 }

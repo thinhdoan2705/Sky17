@@ -1,0 +1,58 @@
+@page "/tai-app"
+@page "/app"
+@inject IWebHostEnvironment Env
+
+<PageTitle>Tải ứng dụng | Sky 17</PageTitle>
+<PageHeader Title="Tải ứng dụng Sky 17" Subtitle="Cài ứng dụng Android cho khách hàng, tài xế và cửa hàng" />
+
+<div class="app-downloads">
+    @foreach (var a in Apps)
+    {
+        var file = Find(a.File);
+        <section class="card app-download">
+            <div class="app-icon" style="background:@a.Color">⚡</div>
+            <div class="grow">
+                <h2>@a.Title</h2>
+                <p class="muted small">@a.Text</p>
+                @if (file is not null)
+                {
+                    <a class="btn" href="/downloads/@a.File" download>⬇ Tải APK (@Size(file.Length))</a>
+                    <span class="small muted d-block mt-1">Cập nhật @file.LastWriteTime.ToString("dd/MM/yyyy HH:mm")</span>
+                }
+                else
+                {
+                    <span class="status gray">Chưa có bản cài đặt</span>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+<div class="card mt-2">
+    <h2>Cách cài đặt</h2>
+    <ol class="small">
+        <li>Mở trang này bằng trình duyệt trên điện thoại Android và bấm <b>Tải APK</b>.</li>
+        <li>Mở file vừa tải. Nếu máy hỏi, cho phép <b>“Cài đặt ứng dụng không rõ nguồn gốc”</b> cho trình duyệt.</li>
+        <li>Mở ứng dụng và cho phép <b>Thông báo</b> (để nghe chuông khi có đơn/chuyến mới) và <b>Vị trí</b> (tài xế bắt buộc).</li>
+        <li>Tài xế và cửa hàng: nên tắt <b>tối ưu hóa pin</b> cho ứng dụng để không bỏ lỡ chuông khi tắt màn hình.</li>
+    </ol>
+</div>
+
+@code {
+    private sealed record AppInfo(string File, string Title, string Text, string Color);
+
+    private static readonly AppInfo[] Apps =
+    [
+        new("sky17-customer.apk", "Sky 17 — Khách hàng", "Tìm món, đặt đơn từ nhiều cửa hàng, theo dõi tài xế trên bản đồ.", "#1769E0"),
+        new("sky17-driver.apk", "Sky 17 Tài xế", "Chuông báo chuyến mới kể cả khi tắt màn hình, định vị GPS, các bước giao hàng & thu COD.", "#16A34A"),
+        new("sky17-merchant.apk", "Sky 17 Cửa hàng", "Chuông báo đơn mới, nhận/từ chối nhiều đơn cùng lúc, quản lý món và doanh thu.", "#F97316"),
+    ];
+
+    private FileInfo? Find(string name)
+    {
+        var f = new FileInfo(Path.Combine(Env.WebRootPath, "downloads", name));
+        return f.Exists ? f : null;
+    }
+
+    private static string Size(long bytes) => $"{bytes / 1024.0 / 1024.0:0.#} MB";
+}

@@ -13,7 +13,7 @@ else
             <h2>Thông tin cá nhân</h2>
             <EditForm Model="input" OnValidSubmit="SaveAsync">
                 <DataAnnotationsValidator />
-                <div class="field"><label>Email đăng nhập</label><input value="@me.Email" disabled /></div>
+                <div class="field"><label>Email (dùng khi quên mật khẩu)</label><input value="@me.Email" disabled /></div>
                 <div class="field"><label for="fn">Họ và tên</label><InputText id="fn" @bind-Value="input.FullName" /><ValidationMessage For="() => input.FullName" /></div>
                 <div class="field"><label for="ph">Số điện thoại</label><InputText id="ph" type="tel" @bind-Value="input.PhoneNumber" /><ValidationMessage For="() => input.PhoneNumber" /></div>
                 <button class="btn" type="submit" disabled="@Busy">Lưu thay đổi</button>

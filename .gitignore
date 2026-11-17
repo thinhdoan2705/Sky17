@@ -7,3 +7,6 @@ src/Sky17.Web/Data/*.db-shm
 src/Sky17.Web/Data/*.db-wal
 src/Sky17.Web/wwwroot/uploads/
 TestResults/
+# Android installers are build outputs (mobile/build-android.ps1)
+src/Sky17.Web/wwwroot/downloads/
+artifacts/

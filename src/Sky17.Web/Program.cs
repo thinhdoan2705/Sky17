@@ -105,9 +105,13 @@ builder.Services.AddRateLimiter(o =>
         // Authentication form posts: strict limit to slow down credential stuffing.
         if (HttpMethods.IsPost(ctx.Request.Method) && (ctx.Request.Path.StartsWithSegments("/Account") || Sky17.Web.Components.Account.LoginPortals.IsLoginPath(ctx.Request.Path)))
             return RateLimitPartition.GetFixedWindowLimiter("auth:" + ip, _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) });
-        if (ctx.Request.Path.StartsWithSegments("/_framework") || ctx.Request.Path.StartsWithSegments("/_blazor"))
+        if (ctx.Request.Path.StartsWithSegments("/_framework") || ctx.Request.Path.StartsWithSegments("/_blazor") || ctx.Request.Path.StartsWithSegments("/hubs"))
             return RateLimitPartition.GetNoLimiter("framework");
-        return RateLimitPartition.GetFixedWindowLimiter("public:" + ip, _ => new FixedWindowRateLimiterOptions { PermitLimit = 300, Window = TimeSpan.FromMinutes(1) });
+        // Static files (css/js/map library/images) are cheap and cached: never count them. Many phones share one
+        // public IP (mobile CGNAT, a store's wifi), so counting every asset would block real users.
+        if ((HttpMethods.IsGet(ctx.Request.Method) || HttpMethods.IsHead(ctx.Request.Method)) && Path.HasExtension(ctx.Request.Path.Value))
+            return RateLimitPartition.GetNoLimiter("static");
+        return RateLimitPartition.GetFixedWindowLimiter("public:" + ip, _ => new FixedWindowRateLimiterOptions { PermitLimit = 600, Window = TimeSpan.FromMinutes(1) });
     });
 });
 
@@ -133,7 +137,10 @@ app.UseRequestLocalization(new RequestLocalizationOptions
     SupportedUICultures = [vi],
 });
 
-app.UseStaticFiles(); // runtime uploads (product images)
+// Runtime files: product images (uploads/) and Android installers (downloads/*.apk, see mobile/README.md).
+var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+contentTypes.Mappings[".apk"] = "application/vnd.android.package-archive";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes });
 app.UseRateLimiter();
 app.UseAntiforgery();
 

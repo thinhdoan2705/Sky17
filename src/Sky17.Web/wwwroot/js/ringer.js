@@ -4,6 +4,11 @@ let audioCtx = null;
 let ringTimer = null;
 let notification = null;
 
+/** Inside the Sky 17 Android app: window.Sky17Native rings with the phone ringtone, vibrates and shows a
+ *  heads-up / lock-screen notification, which keeps working while the app is in the background. */
+const native = () => (typeof window !== 'undefined' && window.Sky17Native) || null;
+export function isNativeApp() { return !!native(); }
+
 /** Browsers allow sound only after a user gesture: unlock on the first click/tap anywhere. */
 if (typeof document !== 'undefined') {
     const auto = () => { unlock(); };
@@ -25,6 +30,7 @@ export async function unlock() {
 
 /** True when sound can play right now. */
 export function isUnlocked() {
+    if (native()) return true; // the app plays the ringtone itself, no browser autoplay restriction
     return !!audioCtx && audioCtx.state === 'running';
 }
 
@@ -49,6 +55,9 @@ function beep() {
 /** Start ringing until stopRing() is called. A new call restarts the ring and re-shows the notification. */
 export function ring(title, body, tag) {
     stopRing();
+    if (native()) {
+        try { native().ring(title || '', body || ''); ringTimer = 'native'; return; } catch { /* fall back to Web Audio */ }
+    }
     try { if (audioCtx?.state === 'suspended') audioCtx.resume(); } catch { }
     beep();
     ringTimer = setInterval(() => {
@@ -69,7 +78,8 @@ export function isRinging() {
 }
 
 export function stopRing() {
-    if (ringTimer) clearInterval(ringTimer);
+    if (native()) { try { native().stopRing(); } catch { } }
+    if (ringTimer && ringTimer !== 'native') clearInterval(ringTimer);
     ringTimer = null;
     try { navigator.vibrate?.(0); } catch { }
     try { notification?.close(); } catch { }

@@ -1,8 +1,7 @@
 @implements IDisposable
 @inject ToastService Toasts
 
-<div class="toast @(current is null ? "" : "show")" role="status" aria-live="polite"
-     style="@(current?.Kind == ToastKind.Error ? "background:#b42332" : current?.Kind == ToastKind.Success ? "background:#0f5e3a" : "")">
+<div class="toast @(current is null ? "" : "show") @(current?.Kind == ToastKind.Error ? "toast-error" : current?.Kind == ToastKind.Success ? "toast-success" : "")" role="status" aria-live="polite">
     @current?.Text
 </div>
 

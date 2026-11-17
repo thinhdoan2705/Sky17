@@ -123,13 +123,13 @@
             module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/driver.js");
             await module.InvokeVoidAsync("ring", "🔔 Có chuyến mới - Sky 17", $"{o.StoreName} · {Fmt.Vnd(o.DriverEarning)} · cách {Fmt.Distance(o.DriverDistanceMeters)}");
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException or InvalidOperationException) { }
     }
 
     private async Task StopRingAsync()
     {
         try { if (module is not null) await module.InvokeVoidAsync("stopRing"); }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException) { }
     }
 
     private async Task AcceptAsync()
@@ -172,6 +172,6 @@
         Realtime.Changed -= OnRealtime;
         timer?.Dispose();
         await StopRingAsync();
-        try { if (module is not null) await module.DisposeAsync(); } catch (JSDisconnectedException) { }
+        try { if (module is not null) await module.DisposeAsync(); } catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 }

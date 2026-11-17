@@ -50,13 +50,13 @@
             module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/map.js");
             await module.InvokeVoidAsync("render", el, new { markers = Markers, route = Route });
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 
     private async Task LocateAsync()
     {
         if (module is null) return;
-        try { await module.InvokeAsync<object?>("showMe", el); } catch (JSDisconnectedException) { }
+        try { await module.InvokeAsync<object?>("showMe", el); } catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 
     public async ValueTask DisposeAsync()
@@ -69,6 +69,6 @@
                 await module.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 }

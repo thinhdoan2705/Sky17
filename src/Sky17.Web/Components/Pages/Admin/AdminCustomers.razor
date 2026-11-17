@@ -6,7 +6,7 @@
 
 <div class="card">
     <div class="table-toolbar">
-        <input class="search" placeholder="⌕ Tên, email, số điện thoại..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm khách hàng" />
+        <input class="search" placeholder="Tên, email, số điện thoại..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm khách hàng" />
     </div>
     @if (Loading) { <Skeleton Lines="6" /> }
     else if (page is null || page.TotalCount == 0) { <EmptyState Icon="☺" Title="Không tìm thấy khách hàng" /> }

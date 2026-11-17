@@ -1,0 +1,61 @@
+@* Line icons in the style of SF Symbols (24×24, 1.8 stroke, round caps). Unknown names fall back to the text itself. *@
+@if (Paths.TryGetValue(Name, out var d))
+{
+    <svg class="icon @Class" width="@Size" height="@Size" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="@Stroke" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        @((MarkupString)d)
+    </svg>
+}
+else
+{
+    <span class="icon-text @Class" aria-hidden="true">@Name</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 24;
+    [Parameter] public double Stroke { get; set; } = 1.8;
+    [Parameter] public string? Class { get; set; }
+
+    public static bool Has(string name) => Paths.ContainsKey(name);
+
+    private static readonly Dictionary<string, string> Paths = new()
+    {
+        ["house"] = "<path d='M3 10.5 12 3l9 7.5'/><path d='M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5'/>",
+        ["storefront"] = "<path d='M3 9 4.5 4h15L21 9'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/><path d='M5 11.5V20h14v-8.5'/><path d='M10 20v-5h4v5'/>",
+        ["receipt"] = "<path d='M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z'/><path d='M9 8h6M9 12h6M9 16h3'/>",
+        ["cart"] = "<circle cx='9' cy='20' r='1.4'/><circle cx='18' cy='20' r='1.4'/><path d='M2.5 3h2.6l2.4 12h11l2-8.5H6.2'/>",
+        ["person"] = "<circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/>",
+        ["person-circle"] = "<circle cx='12' cy='12' r='9.5'/><circle cx='12' cy='10' r='3.2'/><path d='M6.2 18.6a6.6 6.6 0 0 1 11.6 0'/>",
+        ["bell"] = "<path d='M18 16V11a6 6 0 1 0-12 0v5l-2 2h16z'/><path d='M10 20.5a2 2 0 0 0 4 0'/>",
+        ["search"] = "<circle cx='11' cy='11' r='7'/><path d='m20.5 20.5-4.5-4.5'/>",
+        ["chart"] = "<path d='M4 20V10M10 20V4M16 20v-7M21 20H3'/>",
+        ["grid"] = "<rect x='3.5' y='3.5' width='7' height='7' rx='2'/><rect x='13.5' y='3.5' width='7' height='7' rx='2'/><rect x='3.5' y='13.5' width='7' height='7' rx='2'/><rect x='13.5' y='13.5' width='7' height='7' rx='2'/>",
+        ["shippingbox"] = "<path d='M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z'/><path d='M3.5 7.5 12 12l8.5-4.5M12 12v9'/>",
+        ["tag"] = "<path d='M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z'/><circle cx='7.5' cy='7.5' r='1.3'/>",
+        ["list"] = "<path d='M9 6h11M9 12h11M9 18h11'/><circle cx='4.5' cy='6' r='1'/><circle cx='4.5' cy='12' r='1'/><circle cx='4.5' cy='18' r='1'/>",
+        ["checkmark-seal"] = "<path d='M12 2.5 14.6 4.4l3.2-.1.9 3.1 2.6 1.9-1 3 1 3-2.6 1.9-.9 3.1-3.2-.1L12 21.5l-2.6-1.9-3.2.1-.9-3.1L2.7 14.7l1-3-1-3 2.6-1.9.9-3.1 3.2.1z'/><path d='m8.5 12 2.3 2.3 4.7-4.6'/>",
+        ["gear"] = "<circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'/>",
+        ["clock"] = "<circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/>",
+        ["wallet"] = "<path d='M4 6.5A2.5 2.5 0 0 1 6.5 4H18v4'/><rect x='3' y='8' width='18' height='12' rx='2.5'/><circle cx='16.5' cy='14' r='1.2'/>",
+        ["map"] = "<path d='m9 4-5.5 2v14L9 18l6 2 5.5-2V4L15 6z'/><path d='M9 4v14M15 6v14'/>",
+        ["location"] = "<path d='M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z'/><circle cx='12' cy='9.5' r='2.5'/>",
+        ["scooter"] = "<circle cx='6' cy='17' r='3'/><circle cx='18' cy='17' r='3'/><path d='M9 17h6l-2-8h3M13 9l-2-4H8'/><path d='M18 14l-1.5-5'/>",
+        ["people"] = "<circle cx='9' cy='8' r='3.5'/><path d='M2.5 20a6.5 6.5 0 0 1 13 0'/><path d='M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3A6.5 6.5 0 0 1 21.5 20'/>",
+        ["shield"] = "<path d='M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z'/><path d='m9 12 2 2 4-4'/>",
+        ["doc"] = "<path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5M9 13h6M9 17h4'/>",
+        ["dollar"] = "<circle cx='12' cy='12' r='9'/><path d='M15 9.2c-.6-1-1.7-1.4-3-1.4-1.7 0-3 .8-3 2.1 0 3 6 1.4 6 4.3 0 1.3-1.3 2.1-3 2.1-1.4 0-2.6-.5-3.2-1.6M12 6v1.8M12 16.3V18'/>",
+        ["chevron-right"] = "<path d='m9 5 7 7-7 7'/>",
+        ["chevron-left"] = "<path d='m15 5-7 7 7 7'/>",
+        ["plus"] = "<path d='M12 5v14M5 12h14'/>",
+        ["minus"] = "<path d='M5 12h14'/>",
+        ["xmark"] = "<path d='M6 6l12 12M18 6 6 18'/>",
+        ["check"] = "<path d='m5 12.5 4.5 4.5L19 7.5'/>",
+        ["phone"] = "<path d='M5 3.5h3.2l1.6 4-2 1.3a11 11 0 0 0 5.4 5.4l1.3-2 4 1.6V17a2.5 2.5 0 0 1-2.5 2.5A15.5 15.5 0 0 1 2.5 6 2.5 2.5 0 0 1 5 3.5z'/>",
+        ["logout"] = "<path d='M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3'/><path d='M10 8l-4 4 4 4M6 12h10'/>",
+        ["key"] = "<circle cx='8' cy='15' r='4'/><path d='m11 12 9-9M17 6l2 2M15 8l2 2'/>",
+        ["flame"] = "<path d='M12 21c3.9 0 6.5-2.6 6.5-6.3 0-4.4-4.1-6.6-4.6-11.2C11 5.6 9.5 8.3 9.7 11c-1.3-.6-2-1.9-2.1-3.4C6.1 9.3 5.5 11.4 5.5 14.7 5.5 18.4 8.1 21 12 21z'/>",
+        ["sparkles"] = "<path d='M10 3.5 11.6 8 16 9.5l-4.4 1.6L10 15.5 8.4 11 4 9.5 8.4 8z'/><path d='M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z'/>",
+        ["bolt"] = "<path d='M13 2.5 4.5 13.5H11L10 21.5l8.5-11H12z'/>",
+    };
+}

@@ -13,7 +13,7 @@
 </div>
 <div class="card">
     <div class="table-toolbar">
-        <input class="search" placeholder="⌕ Tên, biển số, SĐT..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm tài xế" />
+        <input class="search" placeholder="Tên, biển số, SĐT..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm tài xế" />
     </div>
     @if (Loading) { <Skeleton Lines="6" /> }
     else if (list.Count == 0) { <EmptyState Icon="🛵" Title="Không có tài xế" /> }

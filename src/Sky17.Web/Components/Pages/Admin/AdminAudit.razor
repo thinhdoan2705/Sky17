@@ -6,7 +6,7 @@
 
 <div class="card">
     <div class="table-toolbar">
-        <input class="search" placeholder="⌕ Hành động, mã đơn, nội dung..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm nhật ký" />
+        <input class="search" placeholder="Hành động, mã đơn, nội dung..." @bind="search" @bind:event="oninput" @bind:after="Filter" aria-label="Tìm nhật ký" />
     </div>
     @if (Loading) { <Skeleton Lines="8" /> }
     else if (page is null || page.TotalCount == 0) { <EmptyState Icon="☰" Title="Không có nhật ký" /> }

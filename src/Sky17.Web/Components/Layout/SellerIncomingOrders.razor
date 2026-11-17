@@ -134,7 +134,7 @@
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ringer.js");
             await UpdateRingAsync(orders.Count > 0);
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException or InvalidOperationException) { }
     }
 
     private async Task TickAsync()
@@ -143,7 +143,7 @@
         if (ticks % 5 == 0) await LoadAsync();
         if (module is not null && orders.Count > 0 && ticks % 2 == 0)
         {
-            try { soundOn = await module.InvokeAsync<bool>("isUnlocked"); } catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+            try { soundOn = await module.InvokeAsync<bool>("isUnlocked"); } catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException) { }
         }
         if (orders.Count > 0) StateHasChanged();
     }
@@ -199,7 +199,7 @@
                 ringing = false;
             }
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException) { }
     }
 
     private async Task UnlockAsync()
@@ -211,7 +211,7 @@
             ringing = false;
             await UpdateRingAsync(orders.Count > 0);
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException) { }
     }
 
     private async Task ToggleMuteAsync()
@@ -305,6 +305,6 @@
                 await module.DisposeAsync();
             }
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or JSException) { }
     }
 }

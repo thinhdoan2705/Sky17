@@ -7,13 +7,16 @@
 
 <div class="driver-shell">
     <div class="driver-top">
-        <a href="/driver" class="logo" style="padding:0"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
-        <div style="display:flex;align-items:center;gap:11px">
-            @if (profile is not null)
-            {
-                <span class="small muted">@(profile.IsOnline ? "Đang nhận chuyến" : "Đang offline")</span>
+        <a href="/driver" class="logo" style="padding:0"><span class="logo-mark"><Icon Name="bolt" Size="20" Stroke="2.2" /></span><span class="logo-word">SKY <em>17</em></span></a>
+        @if (profile is not null)
+        {
+            <div class="online-pill @(profile.IsOnline ? "on" : "")">
+                <span class="online-dot"></span>
+                <span>@(profile.IsOnline ? "Trực tuyến" : "Ngoại tuyến")</span>
                 <button aria-label="Bật hoặc tắt nhận chuyến" class="switch @(profile.IsOnline ? "on" : "")" disabled="@(busy || profile.Status != DriverStatus.Active)" @onclick="ToggleAsync"></button>
-            }
+            </div>
+        }
+        <div class="driver-top-actions">
             <NotificationBell />
             <UserMenu Name="@profile?.FullName" />
         </div>
@@ -36,18 +39,18 @@
         </div>
     }
     <nav class="driver-nav">
-        <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active">⌂ Tổng quan</NavLink>
-        <NavLink href="/driver/history" ActiveClass="active">▤ Lịch sử chuyến</NavLink>
-        <NavLink href="/driver/earnings" ActiveClass="active">◉ Thu nhập & COD</NavLink>
-        <NavLink href="/driver/profile" ActiveClass="active">☻ Hồ sơ & vị trí</NavLink>
+        <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active"><Icon Name="house" Size="18" /> Tổng quan</NavLink>
+        <NavLink href="/driver/history" ActiveClass="active"><Icon Name="clock" Size="18" /> Lịch sử chuyến</NavLink>
+        <NavLink href="/driver/earnings" ActiveClass="active"><Icon Name="wallet" Size="18" /> Thu nhập & COD</NavLink>
+        <NavLink href="/driver/profile" ActiveClass="active"><Icon Name="person-circle" Size="18" /> Hồ sơ & vị trí</NavLink>
     </nav>
     @Body
 </div>
 <nav class="mobile-tabs" aria-label="Điều hướng tài xế">
-    <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active"><span>⌂</span>Tổng quan</NavLink>
-    <NavLink href="/driver/history" ActiveClass="active"><span>▤</span>Lịch sử</NavLink>
-    <NavLink href="/driver/earnings" ActiveClass="active"><span>◉</span>Thu nhập</NavLink>
-    <NavLink href="/driver/profile" ActiveClass="active"><span>☻</span>Hồ sơ</NavLink>
+    <NavLink href="/driver" Match="NavLinkMatch.All" ActiveClass="active"><Icon Name="house" /><span>Tổng quan</span></NavLink>
+    <NavLink href="/driver/history" ActiveClass="active"><Icon Name="clock" /><span>Lịch sử</span></NavLink>
+    <NavLink href="/driver/earnings" ActiveClass="active"><Icon Name="wallet" /><span>Thu nhập</span></NavLink>
+    <NavLink href="/driver/profile" ActiveClass="active"><Icon Name="person-circle" /><span>Hồ sơ</span></NavLink>
 </nav>
 <DriverOfferPopup />
 <ToastHost />
@@ -79,7 +82,7 @@
             mode = await module.InvokeAsync<string>("getMode");
             await SyncTrackingAsync();
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
     }
 
     private async Task LoadAsync()
@@ -166,7 +169,7 @@
                 await module.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException or OperationCanceledException or JSException) { }
         self?.Dispose();
     }
 }

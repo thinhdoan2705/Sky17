@@ -13,8 +13,8 @@ The visual design comes from the supplied HTML kit (`sky17-html/`); see [DECISIO
 ## Run locally
 ```bash
 dotnet restore
-dotnet build
-dotnet test
+dotnet build src/Sky17.Web        # the solution also contains the Android apps (needs the Android workload)
+dotnet test tests/Sky17.Tests
 dotnet run --project src/Sky17.Web --launch-profile http
 ```
 Open http://localhost:5271. On startup the app **applies EF Core migrations** to `src/Sky17.Web/Data/sky17.db` and, in Development, seeds demo data.
@@ -55,6 +55,17 @@ Details, parameters and limitations: **[docs/DISPATCH_FLOW.md](docs/DISPATCH_FLO
 | `/login` · `/seller/login` · `/driver/login` · `/admin/login` | Per portal | Separate login pages; each accepts only accounts with that role (customers: phone number, partners: e-mail) |
 | `/Account/*` | All | Register (customer/seller/driver), forgot/reset password, change password, logout. `/Account/Login` forwards to the right portal login |
 
+## Android apps
+Three Android apps (customer, driver, store) wrap the hosted site and add native ringing, background connection and permissions. Build: `./mobile/build-android.ps1 -BaseUrl https://your-domain -CopyToWeb`, then users download them at `/tai-app`. Details: **[mobile/README.md](mobile/README.md)**.
+
+## End-to-end tests (real browser / Android)
+```bash
+npm i -g playwright-core                     # uses the installed Chrome
+node tests/e2e/full-flow.js http://localhost:5271     # whole flow, 2 customers, store, driver, admin
+node tests/e2e/android-apps.js http://localhost:5271  # drives the Android apps on an emulator (see mobile/README.md)
+node tests/e2e/screenshots.js http://localhost:5271 shots   # screenshots of every main screen
+```
+
 ## Production / Docker
 ```bash
 docker compose up --build            # http://localhost:8080 (Development mode with demo data by default)
@@ -72,7 +83,7 @@ dotnet ef migrations add <Name> -p src/Sky17.Infrastructure -s src/Sky17.Web -o 
 Migrations are applied automatically at startup (`Database.MigrateAsync`).
 
 ## Tests
-`dotnet test` runs 92 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, phone-number login for customers, structured addresses (province/ward catalog), per-store carts & checkout, store search by distance, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
+`dotnet test tests/Sky17.Tests` runs 96 tests against real SQLite databases with the real migrations: state machine, pricing/money math, registration, phone-number login for customers, structured addresses (province/ward catalog), per-store carts & checkout, seller incoming-orders panel & concurrent accept/reject, store search by distance, seller isolation & store ownership, product CRUD, checkout totals, price/address snapshots, inventory reservation/rollback/restore, checkout idempotency, GrabFood dispatch (nearest driver, decline/timeout → next, busy/offline/stale/far drivers skipped, offer withdrawal, admin-vs-driver race, auto-cancel, no-driver alert), COD recording, settlement idempotency, unauthorized access, map-based pricing (fake routing), and a full 13-step end-to-end workflow.
 
 ## Manual end-to-end test guide
 1. **Admin login** — `/admin/login` as `admin@sky17.local` (sellers/drivers/customers are refused there) → lands on `/admin` with live KPIs.

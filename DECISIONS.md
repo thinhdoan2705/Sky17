@@ -100,3 +100,18 @@ Global limiter: POSTs to `/Account/*` 10/min per IP (credential stuffing); other
 - **Multi-order & Concurrency**: Displays all `Pending` orders across all stores the user belongs to. Provides "✓ Nhận tất cả (N)" and per-order "✓ Nhận đơn" / "✕ Từ chối" (with reason chips). Each order is processed independently via a concurrent `busy` set. Optimistic concurrency and transaction guards ensure that if another staff member or customer acts first, the error is handled gracefully without crashing the Blazor circuit. Accepting an order immediately notifies other store staff (`order_handled`) to close it from their panels and kicks off dispatch (`DispatchOrderAsync`).
 - Full specification: [docs/SELLER_INCOMING_ORDERS.md](docs/SELLER_INCOMING_ORDERS.md).
 
+
+## D18. Android apps = thin native shells around the hosted site
+- `mobile/Sky17.Android` (.NET 10 `net10.0-android`, C#, no extra NuGet packages) builds three apps from one code base: **customer** (`vn.sky17.customer`, opens `/`), **driver** (`vn.sky17.driver`, `/driver`), **store** (`vn.sky17.merchant`, `/seller`). The server address is baked in at build time (`-p:Sky17BaseUrl=`) and can be changed in the app.
+- Why a WebView shell and not a native rewrite: every feature lives in the Blazor site, so web deploys update the apps instantly and there is one code base to test. The native layer only adds what a web page cannot do: a **native ringer** (`window.Sky17Native.ring/stopRing`, used automatically by `wwwroot/js/ringer.js`): looping ringtone, vibration and a heads-up/full-screen notification that also work **in the background**; a **foreground service + partial wake lock** for driver/store apps so the realtime connection survives screen-off; runtime permissions (location, notifications), file chooser, external links (tel:, maps), offline page, edge-to-edge insets.
+- Limitation: if the OS kills the app entirely, nothing rings. That would need Firebase Cloud Messaging (not done). There is no iOS app; iPhone users use the website, which follows iOS design (D19).
+- Build & install: `mobile/README.md`, `mobile/build-android.ps1`; APKs can be offered at `/tai-app` (files in `wwwroot/downloads`, git-ignored).
+- Verified on an Android 14 emulator with `tests/e2e/android-apps.js` (Playwright attached to the app WebView).
+
+## D19. iOS-style design layer
+- `wwwroot/css/ios.css` is loaded last and re-maps the design tokens to Apple system colours (system blue/green/orange/red, grouped background `#F2F2F7`, separators), so every existing component follows without page rewrites. It adds large titles, translucent blurred navigation and tab bars, borderless inset cards, 44pt touch targets, filled/tinted/plain buttons, iOS text fields with search glass, iOS switches, segmented tabs, capsule toasts and bottom sheets with grabbers on phones, and respects `prefers-reduced-motion` and safe-area insets.
+- Navigation icons are inline SVG line icons in the style of SF Symbols (`Components/UI/Icon.razor`) instead of text glyphs.
+- `tests/e2e/screenshots.js` captures every main screen at phone and desktop sizes for review. `full-flow.js` fails if any phone page scrolls sideways.
+
+## D13 (update). Rate limiting
+- Static files (GET/HEAD with a file extension) and the SignalR hub are no longer counted, and the general limit is 600 requests/min per IP. Phones on mobile CGNAT or a shop's wifi share one public IP, and counting every css/js/map file returned 429 to real users (found by the end-to-end test). Auth form posts stay at 10/min per IP.

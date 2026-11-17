@@ -5,7 +5,7 @@
 <PageHeader Title="Cửa hàng" Subtitle="Các cửa hàng đối tác đang hoạt động trên Sky 17" />
 
 <div class="table-toolbar">
-    <input class="search" placeholder="⌕ Tìm cửa hàng..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm cửa hàng" />
+    <input class="search" placeholder="Tìm cửa hàng..." @bind="search" @bind:event="oninput" @bind:after="ReloadAsync" aria-label="Tìm cửa hàng" />
 </div>
 
 @if (Loading) { <Skeleton Lines="4" /> }

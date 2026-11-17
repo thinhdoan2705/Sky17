@@ -8,7 +8,7 @@
 <PageHeader Title="Tìm món ăn" Subtitle="@(string.IsNullOrWhiteSpace(Q) ? "Các cửa hàng gần bạn và thực đơn" : $"Kết quả cho “{Q}”")" />
 
 <form class="flex mb-1" @onsubmit="Go">
-    <input class="search grow" placeholder="⌕ Tên món, cửa hàng..." @bind="term" aria-label="Từ khóa" />
+    <input class="search grow" placeholder="Tên món, cửa hàng..." @bind="term" aria-label="Từ khóa" />
     <button class="btn" type="submit">Tìm</button>
 </form>
 

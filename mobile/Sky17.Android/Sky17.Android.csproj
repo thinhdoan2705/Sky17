@@ -1,0 +1,88 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Thin native Android shell around the hosted Sky 17 Blazor site (WebView).
+    One code base, three apps chosen at build time:
+      dotnet publish -c Release -p:Sky17App=customer -p:Sky17BaseUrl=https://sky17.example.vn
+      Sky17App = customer | driver | seller
+    See mobile/README.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Sky17.Mobile</RootNamespace>
+    <AssemblyName>Sky17.Mobile</AssemblyName>
+
+    <!-- Which app to build and which server it opens (the URL can also be changed inside the app). -->
+    <Sky17App Condition="'$(Sky17App)' == ''">customer</Sky17App>
+    <Sky17BaseUrl Condition="'$(Sky17BaseUrl)' == ''"></Sky17BaseUrl>
+    <!-- true = allow chrome://inspect / Playwright to attach to the WebView (testing only). -->
+    <Sky17WebDebug Condition="'$(Sky17WebDebug)' == ''">false</Sky17WebDebug>
+
+    <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">1</ApplicationVersion>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">1.0.0</ApplicationDisplayVersion>
+
+    <!-- Installable APK (not an .aab bundle); arm for older phones, arm64 for modern ones, x64 for emulators. -->
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <RuntimeIdentifiers>android-arm;android-arm64;android-x64</RuntimeIdentifiers>
+    <AndroidEnableMultipleDex>true</AndroidEnableMultipleDex>
+    <!-- Keep each flavour's intermediate files apart. -->
+    <IntermediateOutputPath>obj\$(Sky17App)\$(Configuration)\</IntermediateOutputPath>
+    <OutputPath>bin\$(Sky17App)\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Sky17App)' == 'customer'">
+    <ApplicationId>vn.sky17.customer</ApplicationId>
+    <Sky17Title>Sky 17</Sky17Title>
+    <Sky17StartPath>/</Sky17StartPath>
+    <Sky17Color>#1769E0</Sky17Color>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Sky17App)' == 'driver'">
+    <ApplicationId>vn.sky17.driver</ApplicationId>
+    <Sky17Title>Sky 17 Tài xế</Sky17Title>
+    <Sky17StartPath>/driver</Sky17StartPath>
+    <Sky17Color>#16A34A</Sky17Color>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Sky17App)' == 'seller'">
+    <ApplicationId>vn.sky17.merchant</ApplicationId>
+    <Sky17Title>Sky 17 Cửa hàng</Sky17Title>
+    <Sky17StartPath>/seller</Sky17StartPath>
+    <Sky17Color>#F97316</Sky17Color>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(BaseIntermediateOutputPath)AppConfig.$(Sky17App).g.cs" />
+  </ItemGroup>
+
+  <Target Name="Sky17ValidateFlavor" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(Sky17App)' != 'customer' and '$(Sky17App)' != 'driver' and '$(Sky17App)' != 'seller'"
+           Text="Sky17App must be customer, driver or seller (got '$(Sky17App)')." />
+  </Target>
+
+  <!-- Bake the flavour settings into C# constants (also used by the [Activity] attributes → manifest). -->
+  <Target Name="Sky17GenerateConfig" BeforeTargets="BeforeBuild;CoreCompile" DependsOnTargets="Sky17ValidateFlavor">
+    <PropertyGroup>
+      <_Sky17Code>
+// &lt;auto-generated /&gt; Generated from Sky17.Android.csproj build properties.
+namespace Sky17.Mobile%3B
+
+internal static class AppConfig
+{
+    public const string Flavor = "$(Sky17App)"%3B
+    public const string Title = "$(Sky17Title)"%3B
+    public const string StartPath = "$(Sky17StartPath)"%3B
+    public const string DefaultBaseUrl = "$(Sky17BaseUrl)"%3B
+    public const string BrandColor = "$(Sky17Color)"%3B
+    public const string Version = "$(ApplicationDisplayVersion)"%3B
+    public const bool WebDebug = $(Sky17WebDebug)%3B
+}
+      </_Sky17Code>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)AppConfig.$(Sky17App).g.cs" Lines="$(_Sky17Code)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+</Project>

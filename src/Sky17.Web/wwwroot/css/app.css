@@ -273,3 +273,13 @@ select.filter,input.filter{min-width:0}
 .incoming-pill{position:fixed;right:18px;bottom:86px;z-index:180;border:0;border-radius:999px;background:#f97316;color:#fff;font-weight:800;padding:13px 18px;box-shadow:0 12px 34px #f9731666;display:flex;align-items:center;gap:8px;animation:ringPulseBtn 1.4s infinite}
 @keyframes ringPulseBtn{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 @media(max-width:600px){.incoming-backdrop{padding:0;align-items:flex-end}.incoming-panel{border-radius:20px 20px 0 0;max-height:96vh}.incoming-list{grid-template-columns:1fr;padding:10px}.incoming-head h2{font-size:17px}}
+
+/* App download page */
+.app-downloads{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.app-download{display:flex;gap:14px;align-items:flex-start}
+.app-download h2{margin:0 0 4px;font-size:16px}
+.app-icon{flex:none;width:56px;height:56px;border-radius:16px;color:#fff;font-size:30px;display:grid;place-items:center}
+/* Long unbreakable text (demo e-mails, codes) must never widen the login card on phones */
+.auth-card,.auth-card .card{min-width:0;max-width:100%}
+.demo-accounts code{display:inline-block;max-width:100%;overflow-wrap:anywhere;word-break:break-all;margin:2px 0}
+.auth-links{flex-wrap:wrap}

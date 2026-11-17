@@ -34,22 +34,22 @@
 
     private static readonly IReadOnlyList<PortalShell.NavItem> ownerItems =
     [
-        new("/seller", "◫", "Tổng quan", Exact: true, Mobile: true),
-        new("/seller/orders", "▣", "Đơn hàng", Mobile: true),
-        new("/seller/products", "▦", "Sản phẩm", Mobile: true),
-        new("/seller/categories", "☷", "Danh mục"),
-        new("/seller/reports", "◉", "Doanh thu", Mobile: true),
-        new("/seller/settlements", "✓", "Đối soát"),
-        new("/seller/store", "⚙", "Cửa hàng", Mobile: true),
+        new("/seller", "chart", "Tổng quan", Exact: true, Mobile: true),
+        new("/seller/orders", "receipt", "Đơn hàng", Mobile: true),
+        new("/seller/products", "shippingbox", "Sản phẩm", Mobile: true),
+        new("/seller/categories", "tag", "Danh mục"),
+        new("/seller/reports", "dollar", "Doanh thu", Mobile: true),
+        new("/seller/settlements", "checkmark-seal", "Đối soát"),
+        new("/seller/store", "storefront", "Cửa hàng", Mobile: true),
     ];
 
     private static readonly IReadOnlyList<PortalShell.NavItem> staffItems =
     [
-        new("/seller", "◫", "Tổng quan", Exact: true, Mobile: true),
-        new("/seller/orders", "▣", "Đơn hàng", Mobile: true),
-        new("/seller/products", "▦", "Sản phẩm", Mobile: true),
-        new("/seller/categories", "☷", "Danh mục", Mobile: true),
-        new("/seller/reports", "◉", "Doanh thu", Mobile: true),
+        new("/seller", "chart", "Tổng quan", Exact: true, Mobile: true),
+        new("/seller/orders", "receipt", "Đơn hàng", Mobile: true),
+        new("/seller/products", "shippingbox", "Sản phẩm", Mobile: true),
+        new("/seller/categories", "tag", "Danh mục", Mobile: true),
+        new("/seller/reports", "dollar", "Doanh thu", Mobile: true),
     ];
 
     protected override async Task OnInitializedAsync()

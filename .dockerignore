@@ -5,3 +5,6 @@
 .vs
 .vscode
 *.user
+mobile
+artifacts
+tests/e2e

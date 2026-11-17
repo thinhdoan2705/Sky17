@@ -6,15 +6,16 @@
 
 <div class="customer-page">
     <header class="shop-header">
-        <a class="logo" href="/" style="padding:0"><span class="logo-mark">⚡</span>SHIP <em>SKY 17</em></a>
-        <form class="shop-search" style="padding:0;border:0;background:none" @onsubmit="Search">
-            <input class="shop-search" style="width:100%;max-width:none" placeholder="⌕ Tìm đồ ăn, thức uống, cửa hàng..." @bind="query" aria-label="Tìm kiếm" />
+        <a class="logo" href="/" style="padding:0"><span class="logo-mark"><Icon Name="bolt" Size="20" Stroke="2.2" /></span>SHIP <em>SKY 17</em></a>
+        <form class="search-field shop-search-form" @onsubmit="Search" role="search">
+            <Icon Name="search" Size="18" />
+            <input type="search" placeholder="Tìm đồ ăn, thức uống, cửa hàng" @bind="query" aria-label="Tìm kiếm" />
         </form>
         <nav class="shop-nav">
             <NavLink href="/stores">Cửa hàng</NavLink>
             <AuthorizeView Roles="Customer">
                 <NavLink href="/orders">Đơn hàng</NavLink>
-                <NavLink href="/cart">🛒 Giỏ hàng (@Cart.Count)</NavLink>
+                <NavLink href="/cart">Giỏ hàng@(Cart.Count > 0 ? $" ({Cart.Count})" : "")</NavLink>
             </AuthorizeView>
             <NotificationBell />
             <UserMenu />
@@ -28,17 +29,17 @@
         @Body
     </main>
     <AuthorizeView Roles="Customer">
-        @if (Cart.Count > 0 && !Nav.Uri.Contains("/cart") && !Nav.Uri.Contains("/checkout"))
+        @if (Cart.Count > 0 && IsShoppingPage)
         {
-            <a class="shop-floating-cart" href="/cart">🛒 Xem giỏ hàng (@Cart.Count)</a>
+            <a class="shop-floating-cart" href="/cart"><Icon Name="cart" Size="20" /> Xem giỏ hàng · @Cart.Count món</a>
         }
     </AuthorizeView>
     <nav class="mobile-tabs" aria-label="Điều hướng">
-        <NavLink href="/" Match="NavLinkMatch.All" ActiveClass="active"><span>⌂</span>Trang chủ</NavLink>
-        <NavLink href="/stores" ActiveClass="active"><span>▦</span>Cửa hàng</NavLink>
-        <NavLink href="/orders" ActiveClass="active"><span>▤</span>Đơn hàng</NavLink>
-        <NavLink href="/cart" ActiveClass="active"><span>🛒</span>Giỏ (@Cart.Count)</NavLink>
-        <NavLink href="/profile" ActiveClass="active"><span>☻</span>Tài khoản</NavLink>
+        <NavLink href="/" Match="NavLinkMatch.All" ActiveClass="active"><Icon Name="house" /><span>Trang chủ</span></NavLink>
+        <NavLink href="/search" ActiveClass="active"><Icon Name="search" /><span>Tìm món</span></NavLink>
+        <NavLink href="/orders" ActiveClass="active"><Icon Name="receipt" /><span>Đơn hàng</span></NavLink>
+        <NavLink href="/cart" ActiveClass="active" class="tab-cart"><Icon Name="cart" />@if (Cart.Count > 0) { <b class="tab-badge">@Cart.Count</b> }<span>Giỏ hàng</span></NavLink>
+        <NavLink href="/profile" ActiveClass="active"><Icon Name="person-circle" /><span>Tài khoản</span></NavLink>
     </nav>
 </div>
 <ToastHost />
@@ -58,6 +59,16 @@
     }
 
     private void OnCartChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>Floating cart only where the customer is picking dishes; elsewhere the tab bar badge shows the count.</summary>
+    private bool IsShoppingPage
+    {
+        get
+        {
+            var path = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+            return path == "/" || path.StartsWith("/search") || path.StartsWith("/stores") || path.StartsWith("/products");
+        }
+    }
 
     private void Search()
     {
