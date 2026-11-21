@@ -27,7 +27,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        options.DetailedErrors = true;
+    });
 
 // ---------------------------------------------------------------- Authentication / Identity
 builder.Services.AddCascadingAuthenticationState();
