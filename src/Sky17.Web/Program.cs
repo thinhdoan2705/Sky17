@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
 using Sky17.Application;
@@ -16,6 +17,14 @@ CultureInfo.DefaultThreadCurrentCulture = vi;
 CultureInfo.DefaultThreadCurrentUICulture = vi;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Forward headers when running in Docker behind reverse proxies (Nginx, Traefik, Cloudflare, etc.)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -116,6 +125,8 @@ builder.Services.AddRateLimiter(o =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // ---------------------------------------------------------------- Database (migrations, never EnsureCreated)
 var seed = builder.Configuration.GetSection("Seed").Get<SeedOptions>() ?? new SeedOptions();
