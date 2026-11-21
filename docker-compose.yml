@@ -1,19 +1,45 @@
 services:
   sky17:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      # Development mode seeds demo data. For a real deployment use Production and set Seed__AdminEmail/Seed__AdminPassword.
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      Seed__DemoPassword: ${SKY17_DEMO_PASSWORD:-Sky17@Dev2026}
-      Seed__AdminEmail: ${SKY17_ADMIN_EMAIL:-}
-      Seed__AdminPassword: ${SKY17_ADMIN_PASSWORD:-}
-    volumes:
-      - sky17-data:/app/data
-      - sky17-uploads:/app/wwwroot/uploads
+    container_name: sky17-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sky17:latest
     restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      # Môi trường chạy: Development (có data demo) hoặc Production
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:8080
+      - DisableHttpsRedirection=true
+
+      # Kết nối Database SQLite & DataProtection keys trong volume
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/sky17.db
+      - DataProtection__KeysPath=/app/data/keys
+
+      # Cấu hình Demo & Tài khoản Admin khởi tạo
+      - Seed__DemoData=${SEED_DEMO_DATA:-true}
+      - Seed__DemoPassword=${SKY17_DEMO_PASSWORD:-Sky17@Dev2026}
+      - Seed__AdminEmail=${SKY17_ADMIN_EMAIL:-}
+      - Seed__AdminPassword=${SKY17_ADMIN_PASSWORD:-}
+
+      # Dịch vụ bản đồ tính khoảng cách (OSRM)
+      - Maps__OsrmBaseUrl=${MAPS_OSRM_URL:-https://router.project-osrm.org}
+    volumes:
+      # Lưu trữ database SQLite và keys bảo mật
+      - sky17-data:/app/data
+      # Lưu trữ file ảnh/avatar tải lên
+      - sky17-uploads:/app/wwwroot/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   sky17-data:
+    name: sky17-data
   sky17-uploads:
+    name: sky17-uploads
